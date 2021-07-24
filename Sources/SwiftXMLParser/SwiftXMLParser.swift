@@ -139,7 +139,7 @@ struct XMLParseError: LocalizedError {
     }
 }
 
-struct XMLEventHandlerError: LocalizedError {
+public struct XMLEventHandlerError: LocalizedError {
     
     var message: String
 
