@@ -141,9 +141,9 @@ struct XMLParseError: LocalizedError {
 
 public struct XMLEventHandlerError: LocalizedError {
     
-    var message: String
+    public var message: String
 
-    init(_ message: String) {
+    public init(_ message: String) {
         self.message = message
     }
 }
