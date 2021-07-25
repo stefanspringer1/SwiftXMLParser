@@ -296,6 +296,8 @@ public func parse(
     
     var attributes = [String:String]()
 
+    var expectedUTF8Rest = 0
+    
     for b in data {
         pos += 1
         if b == U_LINE_FEED {
@@ -303,6 +305,33 @@ public func parse(
             row = 0
         }
         row += 1
+        
+        // check UTF-8 encoding:
+        if expectedUTF8Rest > 0 {
+            if b & 0b10000000 == 0 || b & 0b01000000 > 0 {
+                try error("wrong UTF-8 encoding: expecting 10xxxxxx")
+            }
+            expectedUTF8Rest -= 1
+        }
+        else if 0b10000000 > 0 {
+            if b & 0b01000000 > 0 {
+                if b & 0b00100000 == 0 {
+                    expectedUTF8Rest = 1
+                }
+                else if b & 0b00010000 == 0 {
+                    expectedUTF8Rest = 2
+                }
+                else if b & 0b00001000 == 0 {
+                    expectedUTF8Rest = 3
+                }
+                else {
+                    try error("wrong UTF-8 encoding: uncorrect leading byte")
+                }
+            }
+            else {
+                try error("wrong UTF-8 encoding: uncorrect leading byte")
+            }
+        }
         
         //print("### \(outerState)/\(state): \(characterCitation(b))")
         
