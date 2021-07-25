@@ -9,11 +9,17 @@ import XMLInterfaces
 
 fileprivate let UTF8_TEMPLATE: UInt8 = 0b10000000
 
-// XML 1.0 whitespace:
+// XML whitespace:
 fileprivate let U_CHARACTER_TABULATION: UInt8 = 9
 fileprivate let U_LINE_FEED: UInt8 = 10
 fileprivate let U_CARRIAGE_RETURN: UInt8 = 13
 fileprivate let U_SPACE: UInt8 = 32
+
+// XML whitespaces as characters:
+fileprivate let C_CHARACTER_TABULATION = Character(UnicodeScalar(U_CHARACTER_TABULATION))
+fileprivate let C_LINE_FEED = Character(UnicodeScalar(U_LINE_FEED))
+fileprivate let C_CARRIAGE_RETURN = Character(UnicodeScalar(U_CARRIAGE_RETURN))
+fileprivate let C_SPACE = Character(UnicodeScalar(U_SPACE))
 
 // other characters:
 fileprivate let U_EXCLAMATION_MARK: UInt8 = 33
@@ -247,6 +253,7 @@ public func parse(
     var elementLevel = 0
     
     var texts = [String]()
+    var isWhitespace = true
     
     // for parsing of start tag:
     var tokenStart = -1
@@ -302,6 +309,8 @@ public func parse(
         switch state {
         case .TEXT:
             switch b {
+            case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
+                break
             case U_QUOTATION_MARK, U_APOSTROPHE:
                 if elementLevel == 0 && outerState == .TEXT {
                     try error("non-whitespace \(characterCitation(b)) outside elements")
@@ -328,6 +337,9 @@ public func parse(
                     outerState = .TEXT
                     parsedBefore = pos + 1
                 }
+                else {
+                    isWhitespace = false
+                }
             case U_AMPERSAND:
                 if pos > parsedBefore {
                     texts.append(String(decoding: data.subdata(in: parsedBefore..<pos), as: UTF8.self))
@@ -341,7 +353,8 @@ public func parse(
                     }
                     if !texts.isEmpty {
                         if elementLevel > 0 {
-                            eventHandler.text(text: texts.joined())
+                            eventHandler.text(text: texts.joined(), isWhitespace: isWhitespace)
+                            isWhitespace = true
                         }
                         texts.removeAll()
                     }
@@ -360,9 +373,12 @@ public func parse(
                     case 2: if b == U_BOM_3 && lastB == U_BOM_2 && lastLastB == U_BOM_1 { whitespaceCheck = false }
                     default: break
                     }
-                    if whitespaceCheck && !(b == U_SPACE || b == U_LINE_FEED || b == U_CARRIAGE_RETURN || b ==  U_CHARACTER_TABULATION) {
+                    if whitespaceCheck {
                         try error("non-whitespace \(characterCitation(b)) outside elements")
                     }
+                }
+                else {
+                    isWhitespace = false
                 }
             }
         /* 2 */
@@ -559,12 +575,19 @@ public func parse(
                 }
                 if let theResolution = resolution {
                     texts.append(theResolution)
+                    whitespaceTest: for c in theResolution {
+                        if !(c == C_SPACE || c == C_LINE_FEED || c == C_CARRIAGE_RETURN || c == C_CHARACTER_TABULATION) {
+                            isWhitespace = false
+                            break whitespaceTest
+                        }
+                    }
                 }
                 else if outerState == .TEXT {
                     if !texts.isEmpty {
                         let text = texts.joined()
                         if elementLevel > 0 {
-                            eventHandler.text(text: text)
+                            eventHandler.text(text: text, isWhitespace: isWhitespace)
+                            isWhitespace = true
                         }
                         texts.removeAll()
                     }
