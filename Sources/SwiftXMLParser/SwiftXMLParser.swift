@@ -5,7 +5,7 @@
 //  License: Apache License 2.0
 
 import Foundation
-import XMLInterfaces
+import SwiftXMLInterfaces
 
 fileprivate let UTF8_TEMPLATE: UInt8 = 0b10000000
 
@@ -110,7 +110,7 @@ fileprivate func getFileAsText(path: String) -> String? {
 
 public func parse(
     path: String,
-    eventHandler: XMLInterfaces.XMLEventHandler,
+    eventHandler: SwiftXMLInterfaces.XMLEventHandler,
     resolveInternalEntity: ((_ entityName:String, _ attributeContext: String?, _ attributeName: String?) -> String?)? = nil
 ) throws {
     let _data = getFileAsData(path: path)
@@ -124,7 +124,7 @@ public func parse(
 
 public func parse(
     text: String,
-    eventHandler: XMLInterfaces.XMLEventHandler,
+    eventHandler: SwiftXMLInterfaces.XMLEventHandler,
     resolveInternalEntity: ((_ entityName:String, _ attributeContext: String?, _ attributeName: String?) -> String?)? = nil
 ) throws {
     let _data = text.data(using: .utf8)
@@ -203,7 +203,7 @@ fileprivate struct Stack<Element> {
 public func parse(
     data: Data,
     pathInfo: String? = nil,
-    eventHandler: XMLInterfaces.XMLEventHandler,
+    eventHandler: SwiftXMLInterfaces.XMLEventHandler,
     resolveInternalEntity: ((_ entityName:String, _ attributeContext: String?, _ attributeName: String?) -> String?)? = nil
 ) throws {
     
