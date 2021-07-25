@@ -136,20 +136,11 @@ public func parse(
     }
 }
 
-struct XMLParseError: LocalizedError {
+public struct XMLParseError: LocalizedError {
     
     var message: String
 
     init(_ message: String) {
-        self.message = message
-    }
-}
-
-public struct XMLEventHandlerError: LocalizedError {
-    
-    public var message: String
-
-    public init(_ message: String) {
         self.message = message
     }
 }
