@@ -309,6 +309,8 @@ public func parse(
         switch state {
         case .TEXT:
             switch b {
+            case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
+                break
             case U_QUOTATION_MARK, U_APOSTROPHE:
                 if elementLevel == 0 && outerState == .TEXT {
                     try error("non-whitespace \(characterCitation(b)) outside elements")
@@ -371,12 +373,12 @@ public func parse(
                     case 2: if b == U_BOM_3 && lastB == U_BOM_2 && lastLastB == U_BOM_1 { whitespaceCheck = false }
                     default: break
                     }
-                    if whitespaceCheck && !(b == U_SPACE || b == U_LINE_FEED || b == U_CARRIAGE_RETURN || b ==  U_CHARACTER_TABULATION) {
+                    if whitespaceCheck {
                         try error("non-whitespace \(characterCitation(b)) outside elements")
                     }
                 }
-                else if isWhitespace {
-                    isWhitespace = b == U_SPACE || b == U_LINE_FEED || b == U_CARRIAGE_RETURN || b == U_CHARACTER_TABULATION
+                else {
+                    isWhitespace = false
                 }
             }
         /* 2 */
