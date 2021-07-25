@@ -138,10 +138,14 @@ public func parse(
 
 public struct XMLParseError: LocalizedError {
     
-    var message: String
+    private let message: String
 
     init(_ message: String) {
         self.message = message
+    }
+    
+    public var errorDescription: String? {
+        return message
     }
 }
 
