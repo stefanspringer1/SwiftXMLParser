@@ -11,12 +11,12 @@ let package = Package(
             targets: ["SwiftXMLParser"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/stefanspringer1/XMLInterfaces", from: "0.1.6"),
+        .package(url: "https://github.com/stefanspringer1/SwiftXMLInterfaces", from: "0.1.7"),
     ],
     targets: [
         .target(
             name: "SwiftXMLParser",
-            dependencies: ["XMLInterfaces"]),
+            dependencies: ["SwiftXMLInterfaces"]),
         .testTarget(
             name: "SwiftXMLParserTests",
             dependencies: ["SwiftXMLParser"]),
