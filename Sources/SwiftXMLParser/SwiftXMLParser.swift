@@ -313,7 +313,7 @@ public func parse(
             }
             expectedUTF8Rest -= 1
         }
-        else if 0b10000000 > 0 {
+        else if b & 0b10000000 > 0 {
             if b & 0b01000000 > 0 {
                 if b & 0b00100000 == 0 {
                     expectedUTF8Rest = 1
