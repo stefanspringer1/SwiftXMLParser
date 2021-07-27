@@ -81,45 +81,13 @@ fileprivate let _DECLARATION_LIKE = _DOCUMENT_TYPE_DECLARATION_HEAD | _ENTITY_DE
 // other contants:
 fileprivate let EMPTY_QUOTE_SIGN: Data.Element = 0
 
-fileprivate func getFileAsData(path: String) -> Data? {
-    do {
-        let rawData: Data = try Data(contentsOf: URL(fileURLWithPath: path))
-        return rawData
-    } catch {
-        return nil
-    }
-}
-
-fileprivate func getFileAsBytes(path: String) -> [UInt8]? {
-    do {
-        let rawData: Data = try Data(contentsOf: URL(fileURLWithPath: path))
-        return [UInt8](rawData)
-    } catch {
-        return nil
-    }
-}
-
-fileprivate func getFileAsText(path: String) -> String? {
-    do {
-        let text: String = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
-        return text
-    } catch {
-        return nil
-    }
-}
-
 public func parse(
     path: String,
     eventHandler: SwiftXMLInterfaces.XMLEventHandler,
     resolveInternalEntity: ((_ entityName:String, _ attributeContext: String?, _ attributeName: String?) -> String?)? = nil
 ) throws {
-    let _data = getFileAsData(path: path)
-    if let data = _data {
-        try parse(data: data, pathInfo: path, eventHandler: eventHandler, resolveInternalEntity: resolveInternalEntity)
-    }
-    else {
-        print("ERROR")
-    }
+    let data: Data = try Data(contentsOf: URL(fileURLWithPath: path))
+    try parse(data: data, pathInfo: path, eventHandler: eventHandler, resolveInternalEntity: resolveInternalEntity)
 }
 
 public func parse(
@@ -132,8 +100,16 @@ public func parse(
         try parse(data: data, eventHandler: eventHandler, resolveInternalEntity: resolveInternalEntity)
     }
     else {
-        print("ERROR")
+        throw XMLParseError("fatal error: could not get binary data from text") // should never happen
     }
+}
+
+public func parse(
+    data: Data,
+    eventHandler: SwiftXMLInterfaces.XMLEventHandler,
+    resolveInternalEntity: ((_ entityName:String, _ attributeContext: String?, _ attributeName: String?) -> String?)? = nil
+) throws {
+    try parse(data: data, eventHandler: eventHandler, resolveInternalEntity: resolveInternalEntity)
 }
 
 public struct XMLParseError: LocalizedError {
@@ -200,7 +176,7 @@ fileprivate struct Stack<Element> {
     }
 }
 
-public func parse(
+func parse(
     data: Data,
     pathInfo: String? = nil,
     eventHandler: SwiftXMLInterfaces.XMLEventHandler,
