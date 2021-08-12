@@ -409,7 +409,7 @@ func parse(
                         if elementLevel == 0 && someElement {
                             try error("multiple root elements")
                         }
-                        eventHandler.elementStart(name: name ?? "", attributes: &attributes)
+                        eventHandler.elementStart(name: name ?? "", attributes: &attributes, combineTexts: true)
                         someElement = true
                         ancestors.push(name ?? "")
                         elementLevel += 1
@@ -620,7 +620,7 @@ func parse(
                 if elementLevel == 0 && someElement {
                     try error("multiple root elements")
                 }
-                eventHandler.elementStart(name: name ?? "", attributes: &attributes)
+                eventHandler.elementStart(name: name ?? "", attributes: &attributes, combineTexts: true)
                 eventHandler.elementEnd(name: name ?? "")
                 someElement = true
                 name = nil
