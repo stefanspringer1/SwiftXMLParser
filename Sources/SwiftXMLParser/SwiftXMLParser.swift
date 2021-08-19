@@ -81,37 +81,6 @@ fileprivate let _DECLARATION_LIKE = _DOCUMENT_TYPE_DECLARATION_HEAD | _ENTITY_DE
 // other contants:
 fileprivate let EMPTY_QUOTE_SIGN: Data.Element = 0
 
-public func parse(
-    path: String,
-    eventHandler: SwiftXMLInterfaces.XMLEventHandler,
-    resolveInternalEntity: ((_ entityName:String, _ attributeContext: String?, _ attributeName: String?) -> String?)? = nil
-) throws {
-    let data: Data = try Data(contentsOf: URL(fileURLWithPath: path))
-    try parse(data: data, pathInfo: path, eventHandler: eventHandler, resolveInternalEntity: resolveInternalEntity)
-}
-
-public func parse(
-    text: String,
-    eventHandler: SwiftXMLInterfaces.XMLEventHandler,
-    resolveInternalEntity: ((_ entityName:String, _ attributeContext: String?, _ attributeName: String?) -> String?)? = nil
-) throws {
-    let _data = text.data(using: .utf8)
-    if let data = _data {
-        try parse(data: data, eventHandler: eventHandler, resolveInternalEntity: resolveInternalEntity)
-    }
-    else {
-        throw XMLParseError("fatal error: could not get binary data from text") // should never happen
-    }
-}
-
-public func parse(
-    data: Data,
-    eventHandler: SwiftXMLInterfaces.XMLEventHandler,
-    resolveInternalEntity: ((_ entityName:String, _ attributeContext: String?, _ attributeName: String?) -> String?)? = nil
-) throws {
-    try parse(data: data, eventHandler: eventHandler, resolveInternalEntity: resolveInternalEntity)
-}
-
 public struct XMLParseError: LocalizedError {
     
     private let message: String
@@ -176,11 +145,35 @@ fileprivate struct Stack<Element> {
     }
 }
 
-func parse(
+public func parse(
+    path: String,
+    eventHandler: SwiftXMLInterfaces.XMLEventHandler,
+    internalEntityResolver: InternalEntityResolver?
+) throws {
+    let data: Data = try Data(contentsOf: URL(fileURLWithPath: path))
+    try parse(data: data, pathInfo: path, eventHandler: eventHandler, internalEntityResolver: internalEntityResolver)
+}
+
+public func parse(
+    text: String,
+    pathInfo: String? = nil,
+    eventHandler: SwiftXMLInterfaces.XMLEventHandler,
+    internalEntityResolver: InternalEntityResolver?
+) throws {
+    let _data = text.data(using: .utf8)
+    if let data = _data {
+        try parse(data: data, pathInfo: pathInfo, eventHandler: eventHandler, internalEntityResolver: internalEntityResolver)
+    }
+    else {
+        throw XMLParseError("fatal error: could not get binary data from text") // should never happen
+    }
+}
+
+public func parse(
     data: Data,
     pathInfo: String? = nil,
     eventHandler: SwiftXMLInterfaces.XMLEventHandler,
-    resolveInternalEntity: ((_ entityName:String, _ attributeContext: String?, _ attributeName: String?) -> String?)? = nil
+    internalEntityResolver: InternalEntityResolver?
 ) throws {
     
     let startTime = DispatchTime.now()
@@ -307,6 +300,7 @@ func parse(
         //print("### \(outerState)/\(state): \(characterCitation(b))")
         
         switch state {
+        /* 1 */
         case .TEXT:
             switch b {
             case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
@@ -568,8 +562,8 @@ func parse(
                     }
                     else {
                         isExternal = externalEntityNames.contains(entityText)
-                        if !isExternal, let doResolveInternalEntity = resolveInternalEntity {
-                            resolution = doResolveInternalEntity(entityText, name, token)
+                        if !isExternal, let theInternalEntityResolver = internalEntityResolver {
+                            resolution = theInternalEntityResolver.resolve(entityName: entityText, attributeContext: name, attributeName: token)
                         }
                     }
                 }
