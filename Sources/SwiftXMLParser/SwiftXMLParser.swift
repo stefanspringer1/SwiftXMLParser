@@ -263,6 +263,12 @@ public func parse(
 
     var expectedUTF8Rest = 0
     
+    var declaredEntityNames: Set<String> = []
+    var declaredNotationNames: Set<String> = []
+    var declaredElementNames: Set<String> = []
+    var declaredAttributeListNames: Set<String> = []
+    var declaredParameterEntityNames: Set<String> = []
+    
     for b in data {
         pos += 1
         if b == U_LINE_FEED {
@@ -773,13 +779,21 @@ public func parse(
                             if items.count == 3,
                                let realEntityName = (items[1] as? tokenParseResult)?.value,
                                let value = (items[2] as? quotedParseResult)?.value {
+                                if declaredParameterEntityNames.contains(realEntityName) {
+                                    try error("parameter entity with name \"\(realEntityName)\" declared more than once")
+                                }
                                 eventHandler.parameterEntityDeclaration(name: realEntityName, value: value)
+                                declaredParameterEntityNames.insert(realEntityName)
                                 success = true
                             }
                         }
                         else if items.count == 2 {
                             if let value = (items[1] as? quotedParseResult)?.value {
+                                if declaredEntityNames.contains(entityName) {
+                                    try error("entity with name \"\(entityName)\" declared more than once")
+                                }
                                 eventHandler.internalEntityDeclaration(name: entityName, value: value)
+                                declaredEntityNames.insert(entityName)
                                 success = true
                             }
                         }
@@ -799,14 +813,22 @@ public func parse(
                                     if items.count == 5 + systemShift {
                                         if (items[3 + systemShift] as? tokenParseResult)?.value == "NDATA",
                                            let notation = items[4 + systemShift] as? tokenParseResult {
+                                            if declaredEntityNames.contains(entityName) {
+                                                try error("entity with name \"\(entityName)\" declared more than once")
+                                            }
                                             eventHandler.unparsedEntityDeclaration(name: entityName, publicID: publicValue, systemID: systemValue, notation: notation.value)
                                             externalEntityNames.insert(entityName)
+                                            declaredEntityNames.insert(entityName)
                                             success = true
                                         }
                                     }
                                     else if items.count == 3 + systemShift {
+                                        if declaredEntityNames.contains(entityName) {
+                                            try error("entity with name \"\(entityName)\" declared more than once")
+                                        }
                                         eventHandler.externalEntityDeclaration(name: entityName, publicID: publicValue, systemID: systemValue)
                                         externalEntityNames.insert(entityName)
+                                        declaredEntityNames.insert(entityName)
                                         success = true
                                     }
                                 }
@@ -829,19 +851,27 @@ public func parse(
                                    let publicValue = (items[2] as? quotedParseResult)?.value,
                                    let systemValue = (items[3] as? quotedParseResult)?.value
                                 {
+                                    if declaredNotationNames.contains(notationName) {
+                                        try error("notation \"\(notationName)\" declared more than once")
+                                    }
                                     eventHandler.notationDeclaration(name: notationName, publicID: publicValue, systemID: systemValue)
+                                    declaredNotationNames.insert(notationName)
                                     success = true
                                 }
                             }
                             else if items.count == 3 {
                                 if let publicOrSystemValue = (items[2] as? quotedParseResult)?.value
                                 {
+                                    if declaredNotationNames.contains(notationName) {
+                                        try error("notation \"\(notationName)\" declared more than once")
+                                    }
                                     if hasPublicToken {
                                         eventHandler.notationDeclaration(name: notationName, publicID: publicOrSystemValue, systemID: nil)
                                     }
                                     else {
                                         eventHandler.notationDeclaration(name: notationName, publicID: nil, systemID: publicOrSystemValue)
                                     }
+                                    declaredNotationNames.insert(notationName)
                                     success = true
                                 }
                             }
@@ -1138,7 +1168,11 @@ public func parse(
                             try error("element declaration outside internal subset")
                         }
                         if let theToken = token {
+                            if declaredElementNames.contains(theToken) {
+                                try error("element type \"\(theToken)\" declared more than once")
+                            }
                             eventHandler.elementDeclaration(name: theToken, text: String(decoding: data.subdata(in: outerParsedBefore..<pos+1), as: UTF8.self))
+                            declaredElementNames.insert(theToken)
                         }
                         else {
                             try error("element declaration without name")
@@ -1151,7 +1185,11 @@ public func parse(
                             try error("attribute list declaration outside internal subset")
                         }
                         if let theToken = token {
+                            if declaredAttributeListNames.contains(theToken) {
+                                try error("attribute list for element type \"\(theToken)\" declared more than once")
+                            }
                             eventHandler.attributeListDeclaration(name: theToken, text: String(decoding: data.subdata(in: outerParsedBefore..<pos+1), as: UTF8.self))
+                            declaredAttributeListNames.insert(theToken)
                         }
                         else {
                             try error("element declaration without name")
