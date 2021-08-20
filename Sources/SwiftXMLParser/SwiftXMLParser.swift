@@ -1151,7 +1151,7 @@ public func parse(
                             try error("attribute list declaration outside internal subset")
                         }
                         if let theToken = token {
-                            eventHandler.attributeListDeclaration(elementName: theToken, text: String(decoding: data.subdata(in: outerParsedBefore..<pos+1), as: UTF8.self))
+                            eventHandler.attributeListDeclaration(name: theToken, text: String(decoding: data.subdata(in: outerParsedBefore..<pos+1), as: UTF8.self))
                         }
                         else {
                             try error("element declaration without name")
