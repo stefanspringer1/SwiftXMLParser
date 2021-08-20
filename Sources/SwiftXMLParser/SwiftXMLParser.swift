@@ -602,7 +602,7 @@ public func parse(
                 else {
                     let descriptionStart = isExternal ? "misplaced external" : "remaining internal"
                     if outerState == .START_OR_EMPTY_TAG, let theElementName = name, let theAttributeName = token {
-                        try error("\(descriptionStart) entity \"\(entityText)\" in attribute \"\(theAttributeName)\"of element \"\(theElementName)\"")
+                        try error("\(descriptionStart) entity \"\(entityText)\" in attribute \"\(theAttributeName)\" of element \"\(theElementName)\"")
                     }
                     else {
                         try error("\(descriptionStart) entity \"\(entityText)\" in striclty textual content")
