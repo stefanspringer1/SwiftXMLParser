@@ -599,11 +599,14 @@ public func parse(
                         eventHandler.internalEntity(name: entityText)
                     }
                 }
-                else if isExternal {
-                    try error("misplaced external entity \"\(entityText)\"")
-                }
                 else {
-                    try error("remaining internal entity \"\(entityText)\"")
+                    let descriptionStart = isExternal ? "misplaced external" : "remaining internal"
+                    if outerState == .START_OR_EMPTY_TAG, let theElementName = name, let theAttributeName = token {
+                        try error("\(descriptionStart) entity \"\(entityText)\" in attribute \"\(theAttributeName)\"of element \"\(theElementName)\"")
+                    }
+                    else {
+                        try error("\(descriptionStart) entity \"\(entityText)\" in striclty textual content")
+                    }
                 }
                 state = .TEXT
                 parsedBefore = pos + 1
