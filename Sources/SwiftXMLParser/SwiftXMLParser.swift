@@ -28,6 +28,7 @@ fileprivate let U_NUMBER_SIGN: UInt8 = 35
 fileprivate let U_PERCENT_SIGN: UInt8 = 37
 fileprivate let U_AMPERSAND: UInt8 = 38
 fileprivate let U_APOSTROPHE: UInt8 = 39
+fileprivate let U_LEFT_PARENTHESIS: UInt8 = 40
 fileprivate let U_HYPHEN_MINUS: UInt8 = 45
 fileprivate let U_FULL_STOP: UInt8 = 46
 fileprivate let U_SOLIDUS: UInt8 = 47
@@ -1121,6 +1122,11 @@ public func parse(
         /* 13 */
         case .ELEMENT_DECLARATION, .ATTRIBUTE_LIST_DECLARATION:
             switch b {
+            case U_LEFT_PARENTHESIS:
+                if quoteSign == 0 && tokenStart >= 0 {
+                    token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                    tokenStart = -1
+                }
             case U_GREATER_THAN_SIGN:
                 if quoteSign == 0 {
                     if tokenStart >= 0 {
@@ -1157,14 +1163,14 @@ public func parse(
                     state = outerState; outerState = .TEXT
                 }
             case U_QUOTATION_MARK, U_APOSTROPHE:
-                if tokenStart >= 0 {
-                    token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
-                    tokenStart = -1
-                }
                 if b == quoteSign {
                     quoteSign = 0
                 }
                 else {
+                    if tokenStart >= 0 {
+                        token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                        tokenStart = -1
+                    }
                     quoteSign = b
                 }
             case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
