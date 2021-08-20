@@ -1157,6 +1157,10 @@ public func parse(
                     state = outerState; outerState = .TEXT
                 }
             case U_QUOTATION_MARK, U_APOSTROPHE:
+                if tokenStart >= 0 {
+                    token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                    tokenStart = -1
+                }
                 if b == quoteSign {
                     quoteSign = 0
                 }
