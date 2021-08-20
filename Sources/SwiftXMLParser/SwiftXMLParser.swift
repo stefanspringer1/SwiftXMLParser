@@ -1123,17 +1123,35 @@ public func parse(
             switch b {
             case U_GREATER_THAN_SIGN:
                 if quoteSign == 0 {
+                    if tokenStart >= 0 {
+                        token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                        tokenStart = -1
+                    }
                     if state == .ELEMENT_DECLARATION {
                         if outerState != .INTERNAL_SUBSET {
                             try error("element declaration outside internal subset")
                         }
-                        eventHandler.elementDeclaration(text: String(decoding: data.subdata(in: outerParsedBefore..<pos+1), as: UTF8.self))
+                        if let theToken = token {
+                            eventHandler.elementDeclaration(name: theToken, text: String(decoding: data.subdata(in: outerParsedBefore..<pos+1), as: UTF8.self))
+                        }
+                        else {
+                            try error("element declaration without name")
+                        }
+                        
+                        token = nil
                     }
                     else {
                         if outerState != .INTERNAL_SUBSET {
                             try error("attribute list declaration outside internal subset")
                         }
-                        eventHandler.attributeListDeclaration(text: String(decoding: data.subdata(in: outerParsedBefore..<pos+1), as: UTF8.self))
+                        if let theToken = token {
+                            eventHandler.attributeListDeclaration(elementName: theToken, text: String(decoding: data.subdata(in: outerParsedBefore..<pos+1), as: UTF8.self))
+                        }
+                        else {
+                            try error("element declaration without name")
+                        }
+                        
+                        token = nil
                     }
                     parsedBefore = pos + 1
                     state = outerState; outerState = .TEXT
@@ -1145,8 +1163,15 @@ public func parse(
                 else {
                     quoteSign = b
                 }
+            case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
+                if tokenStart >= 0 {
+                    token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                    tokenStart = -1
+                }
             default:
-                break
+                if token == nil && tokenStart < 0 {
+                    tokenStart = pos
+                }
             }
         /* 14 */
         case .XML_DECLARATION_FINISHING:
