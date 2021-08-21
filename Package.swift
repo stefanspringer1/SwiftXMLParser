@@ -1,4 +1,4 @@
-// swift-tools-version:5.4.0
+// swift-tools-version:5.4
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -11,7 +11,7 @@ let package = Package(
             targets: ["SwiftXMLParser"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/stefanspringer1/SwiftXMLInterfaces", from: "0.1.34"),
+        .package(url: "https://github.com/stefanspringer1/SwiftXMLInterfaces", from: "0.1.35"),
     ],
     targets: [
         .target(
