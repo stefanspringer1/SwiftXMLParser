@@ -1222,5 +1222,7 @@ public class XParser: Parser {
         else if state != .TEXT {
             try error("junk at end of document")
         }
+        
+        eventHandlers.forEach { eventHandler in eventHandler.documentEnd() }
     }
 }
