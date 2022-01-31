@@ -592,7 +592,7 @@ public class XParser: Parser {
                             tokenStart = -1
                         }
                         if let target = name {
-                            eventHandlers.forEach { eventHandler in eventHandler.processingInstruction(target: target, content: parsedBefore<pos-1 ? String(decoding: data.subdata(in: parsedBefore..<pos-1), as: UTF8.self): nil) }
+                            eventHandlers.forEach { eventHandler in eventHandler.processingInstruction(target: target, data: parsedBefore<pos-1 ? String(decoding: data.subdata(in: parsedBefore..<pos-1), as: UTF8.self): nil) }
                             name = nil
                         }
                         else {
