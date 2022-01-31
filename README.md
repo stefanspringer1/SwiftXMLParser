@@ -2,7 +2,7 @@
 
 ## About This Library
 
-This is a non-validating parser for XML files encoding in UTF-8.
+This is a non-validating parser for XML files encoded in UTF-8.
 
 This library is published under the Apache License 2.0, please feel free to use it and change it. Any remark or suggestion or pull requests are welcome, see also my contact information on [my website](https://stefanspringer.com).
 
