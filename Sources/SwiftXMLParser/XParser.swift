@@ -23,19 +23,6 @@ fileprivate let _DECLARATION_LIKE = _DOCUMENT_TYPE_DECLARATION_HEAD | _ENTITY_DE
 // other contants:
 fileprivate let EMPTY_QUOTE_SIGN: Data.Element = 0
 
-public struct XParseError: LocalizedError {
-    
-    private let message: String
-
-    init(_ message: String) {
-        self.message = message
-    }
-    
-    public var errorDescription: String? {
-        return message
-    }
-}
-
 public protocol itemParseResult {
     var description: String { get }
 }
@@ -86,7 +73,7 @@ public class XParser: Parser {
         var row = 0
         
         func error(_ message: String, offset: Int = 0) throws {
-            throw XParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(row):E: \(message)")
+            throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(row):E: \(message)")
         }
         
         func characterCitation(_ b: Data.Element) -> String {

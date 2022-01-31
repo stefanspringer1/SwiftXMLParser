@@ -55,7 +55,7 @@ public class JParser: Parser {
         var row = 0
         
         func error(_ message: String, offset: Int = 0) throws {
-            throw XParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(row):E: \(message)")
+            throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(row):E: \(message)")
         }
         
         func characterCitation(_ b: Data.Element) -> String {
