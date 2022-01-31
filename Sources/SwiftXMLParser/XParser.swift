@@ -1217,7 +1217,7 @@ public class XParser: Parser {
         pos += 1
         
         if elementLevel > 0 {
-            try error("document is not finished, \(elementLevel > 1 ? "elements" : "element") \(ancestors.peekAll().reversed().map{ "\"\($0)\"" }.joined(separator: ", ")) \(elementLevel > 1 ? "are" : "is") not closed")
+            try error("document is not finished: \(elementLevel > 1 ? "elements" : "element") \(ancestors.peekAll().reversed().map{ "\"\($0)\"" }.joined(separator: ", ")) \(elementLevel > 1 ? "are" : "is") not closed")
         }
         else if state != .TEXT {
             try error("junk at end of document")
