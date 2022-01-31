@@ -1,0 +1,71 @@
+//
+//  CharacterCodes.swift
+//
+//  Created 2021 by Stefan Springer, https://stefanspringer.com
+//  License: Apache License 2.0
+
+import Foundation
+
+let NULL_SIGN: Data.Element = 0
+let UTF8_TEMPLATE: UInt8 = 0b10000000
+
+// XML whitespace:
+let U_CHARACTER_TABULATION: UInt8 = 9
+let U_LINE_FEED: UInt8 = 10
+let U_CARRIAGE_RETURN: UInt8 = 13
+let U_SPACE: UInt8 = 32
+
+// XML whitespaces as characters:
+let C_CHARACTER_TABULATION = Character(UnicodeScalar(U_CHARACTER_TABULATION))
+let C_LINE_FEED = Character(UnicodeScalar(U_LINE_FEED))
+let C_CARRIAGE_RETURN = Character(UnicodeScalar(U_CARRIAGE_RETURN))
+let C_SPACE = Character(UnicodeScalar(U_SPACE))
+
+// other characters:
+let U_EXCLAMATION_MARK: UInt8 = 33
+let U_QUOTATION_MARK: UInt8 = 34
+let U_NUMBER_SIGN: UInt8 = 35
+let U_PERCENT_SIGN: UInt8 = 37
+let U_AMPERSAND: UInt8 = 38
+let U_APOSTROPHE: UInt8 = 39
+let U_LEFT_PARENTHESIS: UInt8 = 40
+let U_COMMA: UInt8 = 44
+let U_HYPHEN_MINUS: UInt8 = 45
+let U_FULL_STOP: UInt8 = 46
+let U_SOLIDUS: UInt8 = 47
+let U_DIGIT_ZERO: UInt8 = 47
+let U_DIGIT_NINE: UInt8 = 57
+let U_COLON: UInt8 = 58
+let U_SEMICOLON: UInt8 = 59
+let U_LESS_THAN_SIGN: UInt8 = 60
+let U_EQUALS_SIGN: UInt8 = 61
+let U_GREATER_THAN_SIGN: UInt8 = 62
+let U_QUESTION_MARK: UInt8 = 63
+let U_LATIN_CAPITAL_LETTER_A: UInt8 = 65
+let U_LATIN_CAPITAL_LETTER_C: UInt8 = 67
+let U_LATIN_CAPITAL_LETTER_D: UInt8 = 68
+let U_LATIN_CAPITAL_LETTER_E: UInt8 = 69
+let U_LATIN_CAPITAL_LETTER_I: UInt8 = 73
+let U_LATIN_CAPITAL_LETTER_L: UInt8 = 76
+let U_LATIN_CAPITAL_LETTER_M: UInt8 = 77
+let U_LATIN_CAPITAL_LETTER_N: UInt8 = 78
+let U_LATIN_CAPITAL_LETTER_O: UInt8 = 79
+let U_LATIN_CAPITAL_LETTER_P: UInt8 = 80
+let U_LATIN_CAPITAL_LETTER_S: UInt8 = 83
+let U_LATIN_CAPITAL_LETTER_T: UInt8 = 84
+let U_LATIN_CAPITAL_LETTER_Y: UInt8 = 89
+let U_LATIN_CAPITAL_LETTER_Z: UInt8 = 90
+let U_LEFT_SQUARE_BRACKET: UInt8 = 91
+let U_REVERSE_SOLIDUS: UInt8 = 92
+let U_RIGHT_SQUARE_BRACKET: UInt8 = 93
+let U_LOW_LINE: UInt8 = 95
+let U_LATIN_SMALL_LETTER_A: UInt8 = 97
+let U_LATIN_SMALL_LETTER_L: UInt8 = 108
+let U_LATIN_SMALL_LETTER_M: UInt8 = 109
+let U_LATIN_SMALL_LETTER_X: UInt8 = 120
+let U_LATIN_SMALL_LETTER_Z: UInt8 = 122
+let U_LEFT_CURLY_BRACKET: UInt8 = 123
+let U_RIGHT_CURLY_BRACKET: UInt8 = 125
+let U_BOM_1: UInt8 = 239
+let U_BOM_2: UInt8 = 187
+let U_BOM_3: UInt8 = 191
