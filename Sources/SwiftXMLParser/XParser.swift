@@ -69,8 +69,8 @@ public class XParser: Parser {
         sourceInfo: String? = nil,
         eventHandlers: [XEventHandler]
     ) throws {
-        var line = 1
-        var column = 0
+        var line = 1; var lastLine = 1
+        var column = 0; var lastColumn = 1
         
         func error(_ message: String, offset: Int = 0) throws {
             throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(column):E: \(message)")
@@ -173,14 +173,22 @@ public class XParser: Parser {
         var declaredAttributeListNames: Set<String> = []
         var declaredParameterEntityNames: Set<String> = []
         
-        @inline(__always) func setMainStart() {
-            mainParsedBefore = parsedBefore; mainStartLine = line; mainStartColumn = column
+        var setMainStartOnNextCodePoint = false
+        
+        @inline(__always) func setMainStart(delayed: Bool = false) {
+            mainParsedBefore = parsedBefore + (delayed ? 1 : 0); mainStartLine = line; mainStartColumn = column
         }
         
-        @inline(__always) func broadcast(_ processEventHandlers: (XEventHandler,SourceRange) -> ()) {
-            let sourceRange = SourceRange(start: SourcePosition(binaryPosition: mainParsedBefore, line: mainStartLine, column: mainStartColumn), end: SourcePosition(binaryPosition: binaryPosition+1, line: line, column: column))
+        @inline(__always) func broadcast(forText: Bool = false, processEventHandlers: (XEventHandler,SourceRange) -> ()) {
+            let sourceRange = SourceRange(
+                start: SourcePosition(binaryPosition: mainParsedBefore, line: mainStartLine, column: mainStartColumn),
+                end: SourcePosition(binaryPosition: forText ? binaryPosition : binaryPosition+1, line: forText ? lastLine : line, column: forText ? lastColumn : column)
+            )
             eventHandlers.forEach { eventHandler in
                 processEventHandlers(eventHandler,sourceRange)
+            }
+            if !forText {
+                setMainStartOnNextCodePoint = true
             }
         }
         
@@ -249,6 +257,11 @@ public class XParser: Parser {
                 try error("x\(String(format: "%X", codePoint)) is not a Unicode codepoint")
             }
             
+            if setMainStartOnNextCodePoint {
+                setMainStart(delayed: true)
+                setMainStartOnNextCodePoint = false
+            }
+            
             //print("@ \(line):\(column) (\(binaryPosition)): \(outerState)/\(state): \(characterCitation(codePoint)) (WHITESPACE: \(isWhitespace))")
             
             switch state {
@@ -307,7 +320,7 @@ public class XParser: Parser {
                                 }
                                 else {
                                     let text = texts.joined().replacingOccurrences(of: "\r\n", with: "\n")
-                                    broadcast { (eventHandler,sourceRange) in
+                                    broadcast(forText: true) { (eventHandler,sourceRange) in
                                         eventHandler.text(
                                             text: text,
                                             whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
@@ -589,7 +602,7 @@ public class XParser: Parser {
                                 }
                                 else {
                                     let text = text.replacingOccurrences(of: "\r\n", with: "\n")
-                                    broadcast { (eventHandler,sourceRange) in
+                                    broadcast(forText: true) { (eventHandler,sourceRange) in
                                         eventHandler.text(
                                             text: text,
                                             whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
@@ -1441,6 +1454,8 @@ public class XParser: Parser {
             
             lastLastCodePoint = lastCodePoint
             lastCodePoint = codePoint
+            lastLine = line
+            lastColumn = column
         }
         binaryPosition += 1
         
