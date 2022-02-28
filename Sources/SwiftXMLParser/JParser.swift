@@ -58,12 +58,12 @@ public class JParser: Parser {
             throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(row):E: \(message)")
         }
         
-        func characterCitation(_ b: Data.Element) -> String {
-            if b & UTF8_TEMPLATE == 0 && b >= U_SPACE {
-                return "\"\(Character(UnicodeScalar(b)))\""
+        func characterCitation(_ codePoint: UnicodeCodePoint) -> String {
+            if codePoint >= U_SPACE && codePoint <= U_MAX_ASCII {
+                return "\"\(Character(UnicodeScalar(codePoint)!))\""
             }
             else {
-                return "character x\(String(format: "%X", b))"
+                return "character x\(String(format: "%X", codePoint))"
             }
         }
         
@@ -105,31 +105,33 @@ public class JParser: Parser {
         
         eventHandlers.forEach { eventHandler in eventHandler.documentStart() }
         
-        var lastB: Data.Element = 0
+        var codePoint: UnicodeCodePoint = 0
+        var lastCodePoint: UnicodeCodePoint = 0
         
-        for b in data {
+        binaryLoop: for b in data {
             pos += 1
-            if lastB == U_LINE_FEED {
-                line += 1
-                row = 0
-            }
             
             // check UTF-8 encoding:
             if expectedUTF8Rest > 0 {
                 if b & 0b10000000 == 0 || b & 0b01000000 > 0 {
                     try error("wrong UTF-8 encoding: expecting follow-up byte 10xxxxxx")
                 }
+                codePoint |= UnicodeCodePoint(b << 2)
                 expectedUTF8Rest -= 1
             }
             else if b & 0b10000000 > 0 {
+                codePoint = 0
                 if b & 0b01000000 > 0 {
                     if b & 0b00100000 == 0 {
+                        codePoint |= UnicodeCodePoint(b << 3)
                         expectedUTF8Rest = 1
                     }
                     else if b & 0b00010000 == 0 {
+                        codePoint |= UnicodeCodePoint(b << 4)
                         expectedUTF8Rest = 2
                     }
                     else if b & 0b00001000 == 0 {
+                        codePoint |= UnicodeCodePoint(b << 5)
                         expectedUTF8Rest = 3
                     }
                     else {
@@ -140,9 +142,27 @@ public class JParser: Parser {
                     try error("wrong UTF-8 encoding: uncorrect leading byte")
                 }
             }
+            else {
+                codePoint = UnicodeCodePoint(b)
+            }
             
-            if expectedUTF8Rest == 0 {
-                row += 1
+            if expectedUTF8Rest > 0 {
+                break binaryLoop
+            }
+            
+            if lastCodePoint == U_LINE_FEED {
+                line += 1
+                row = 0
+            }
+            
+            if let unicodeScalar = UnicodeScalar(codePoint) {
+                let unicodeScalarProperties = unicodeScalar.properties
+                if !(unicodeScalarProperties.isDiacritic || unicodeScalarProperties.isVariationSelector) {
+                    row += 1
+                }
+            }
+            else {
+                try error("x\(String(format: "%X", codePoint)) is not a Unicode codepoint")
             }
             
 //            if b != U_SPACE, let state = states.peek() {
@@ -151,7 +171,7 @@ public class JParser: Parser {
             
             switch states.peek() {
             case .ARRAY_AWAITING_THING:
-                switch b {
+                switch codePoint {
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     break
                 case U_LEFT_CURLY_BRACKET:
@@ -198,27 +218,27 @@ public class JParser: Parser {
                     }
                 }
             case .OBJECT_AWAITING_NAME:
-                switch b {
+                switch codePoint {
                 case U_QUOTATION_MARK:
                     states.push(.TEXT)
                     valueStart = pos + 1
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     break
                 default:
-                    try error("invalid character \(characterCitation(b)) in object")
+                    try error("invalid character \(characterCitation(codePoint)) in object")
                 }
             case .OBJECT_AWAITING_COLON:
-                switch b {
+                switch codePoint {
                 case U_COLON:
                     states.change(.OBJECT_AWAITING_VALUE)
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     break
                 default:
-                    try error("invalid character \(characterCitation(b)) in object")
+                    try error("invalid character \(characterCitation(codePoint)) in object")
                     break
                 }
             case .OBJECT_AWAITING_VALUE:
-                switch b {
+                switch codePoint {
                 case U_QUOTATION_MARK:
                     valueStart = pos + 1
                     states.push(.TEXT)
@@ -235,7 +255,7 @@ public class JParser: Parser {
                     valueStart = pos
                 }
             case .NON_TEXT_VALUE:
-                switch b {
+                switch codePoint {
                 case U_COMMA:
                     _ = states.pop()
                     switch states.pop() {
@@ -328,7 +348,7 @@ public class JParser: Parser {
                     break
                 }
             case .TEXT:
-                switch b {
+                switch codePoint {
                 case U_REVERSE_SOLIDUS:
                     states.push(.TEXT_ESCAPE)
                 case U_QUOTATION_MARK:
@@ -361,7 +381,7 @@ public class JParser: Parser {
                     break
                 }
             case .ARRAY_AWAITING_COMMA_OR_END:
-                switch b {
+                switch codePoint {
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     break
                 case U_COMMA:
@@ -380,10 +400,10 @@ public class JParser: Parser {
                     }
                     bracketLevel -= 1
                 default:
-                    try error("invalid character \(characterCitation(b)) in array")
+                    try error("invalid character \(characterCitation(codePoint)) in array")
                 }
             case .OBJECT_AWAITING_COMMA_OR_END:
-                switch b {
+                switch codePoint {
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     break
                 case U_COMMA:
@@ -402,14 +422,14 @@ public class JParser: Parser {
                     }
                     bracketLevel -= 1
                 default:
-                    try error("invalid character \(characterCitation(b)) in object")
+                    try error("invalid character \(characterCitation(codePoint)) in object")
                 }
             case .TEXT_ESCAPE:
                 _ = states.pop()
             case .none:
                 try error("undefined state") // should not happen
             }
-            lastB = b
+            lastCodePoint = codePoint
         }
         pos += 1
         

@@ -76,24 +76,33 @@ public class XParser: Parser {
             throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(row):E: \(message)")
         }
         
-        func characterCitation(_ b: Data.Element) -> String {
-            if b & UTF8_TEMPLATE == 0 && b >= U_SPACE {
-                return "\"\(Character(UnicodeScalar(b)))\""
+        func characterCitation(_ codePoint: UnicodeCodePoint) -> String {
+            if codePoint >= U_SPACE && codePoint <= U_MAX_ASCII {
+                return "\"\(Character(UnicodeScalar(codePoint)!))\""
             }
             else {
-                return "character x\(String(format: "%X", b))"
+                return "character x\(String(format: "%X", codePoint))"
             }
         }
         
-        func isNameStartCharacter(_ b: Data.Element) -> Bool {
-            return (b >= U_LATIN_SMALL_LETTER_A && b <= U_LATIN_SMALL_LETTER_Z)
-               || (b >= U_LATIN_CAPITAL_LETTER_A && b <= U_LATIN_CAPITAL_LETTER_Z)
-               || b == U_COLON || b == U_LOW_LINE || b & UTF8_TEMPLATE > 0
+        func isNameStartCharacter(_ codePoint: UnicodeCodePoint) -> Bool {
+            return (codePoint >= U_LATIN_SMALL_LETTER_A && codePoint <= U_LATIN_SMALL_LETTER_Z)
+            || (codePoint >= U_LATIN_CAPITAL_LETTER_A && codePoint <= U_LATIN_CAPITAL_LETTER_Z)
+            || codePoint == U_COLON || codePoint == U_LOW_LINE
+            || (codePoint >= 0xC0 && codePoint <= 0xD6) || (codePoint >= 0xD8 && codePoint <= 0xF6)
+            || (codePoint >= 0xF8 && codePoint <= 0x2FF) || (codePoint >= 0x370 && codePoint <= 0x37D)
+            || (codePoint >= 0x37F && codePoint <= 0x1FFF) || (codePoint >= 0x200C && codePoint <= 0x200D)
+            || (codePoint >= 0x2070 && codePoint <= 0x218F) || (codePoint >= 0x2C00 && codePoint <= 0x2FEF)
+            || (codePoint >= 0x3001 && codePoint <= 0xD7FF) || (codePoint >= 0xF900 && codePoint <= 0xFDCF)
+            || (codePoint >= 0xFDF0 && codePoint <= 0xFFFD) || (codePoint >= 0x10000 && codePoint <= 0xEFFFF)
         }
 
-        func isNameCharacter(_ b: Data.Element) -> Bool {
-            return isNameStartCharacter(b) || b == U_HYPHEN_MINUS || b == U_FULL_STOP ||
-                (b >= U_DIGIT_ZERO && b <= U_DIGIT_NINE)
+        func isNameCharacter(_ codePoint: UnicodeCodePoint) -> Bool {
+            return codePoint == U_HYPHEN_MINUS || codePoint == U_FULL_STOP
+            || (codePoint >= U_DIGIT_ZERO && codePoint <= U_DIGIT_NINE)
+            || isNameStartCharacter(codePoint)
+            || codePoint == 0xB7 || (codePoint >= 0x0300 && codePoint <= 0x036F)
+            || (codePoint >= 0x203F && codePoint <= 0x2040)
         }
         
         func formatNonWhitespace(_ text: String) -> String {
@@ -106,9 +115,6 @@ public class XParser: Parser {
         var outerParsedBefore = 0
         var possibleState = _DECLARATION_LIKE
         var unkownDeclarationOffset = 0
-        
-        var lastB: Data.Element = 0
-        var lastLastB: Data.Element = 0
         
         var elementLevel = 0
         
@@ -166,29 +172,34 @@ public class XParser: Parser {
         
         eventHandlers.forEach { eventHandler in eventHandler.documentStart() }
         
-        for b in data {
+        var codePoint: UnicodeCodePoint = 0
+        var lastCodePoint: UnicodeCodePoint = 0
+        var lastLastCodePoint: UnicodeCodePoint = 0
+        
+        binaryLoop: for b in data {
             pos += 1
-            if lastB == U_LINE_FEED {
-                line += 1
-                row = 0
-            }
             
             // check UTF-8 encoding:
             if expectedUTF8Rest > 0 {
                 if b & 0b10000000 == 0 || b & 0b01000000 > 0 {
                     try error("wrong UTF-8 encoding: expecting follow-up byte 10xxxxxx")
                 }
+                codePoint |= UnicodeCodePoint(b << 2)
                 expectedUTF8Rest -= 1
             }
             else if b & 0b10000000 > 0 {
+                codePoint = 0
                 if b & 0b01000000 > 0 {
                     if b & 0b00100000 == 0 {
+                        codePoint |= UnicodeCodePoint(b << 3)
                         expectedUTF8Rest = 1
                     }
                     else if b & 0b00010000 == 0 {
+                        codePoint |= UnicodeCodePoint(b << 4)
                         expectedUTF8Rest = 2
                     }
                     else if b & 0b00001000 == 0 {
+                        codePoint |= UnicodeCodePoint(b << 5)
                         expectedUTF8Rest = 3
                     }
                     else {
@@ -199,22 +210,40 @@ public class XParser: Parser {
                     try error("wrong UTF-8 encoding: uncorrect leading byte")
                 }
             }
-            
-            if expectedUTF8Rest == 0 {
-                row += 1
+            else {
+                codePoint = UnicodeCodePoint(b)
             }
             
-            //print("### \(outerState)/\(state): \(characterCitation(b)) (WHITESPACE: \(isWhitespace))")
+            if expectedUTF8Rest > 0 {
+                break binaryLoop
+            }
+            
+            if lastCodePoint == U_LINE_FEED {
+                line += 1
+                row = 0
+            }
+            
+            if let unicodeScalar = UnicodeScalar(codePoint) {
+                let unicodeScalarProperties = unicodeScalar.properties
+                if !(unicodeScalarProperties.isDiacritic || unicodeScalarProperties.isVariationSelector) {
+                    row += 1
+                }
+            }
+            else {
+                try error("x\(String(format: "%X", codePoint)) is not a Unicode codepoint")
+            }
+            
+            //print("### \(outerState)/\(state): \(characterCitation(codePoint)) (WHITESPACE: \(isWhitespace))")
             
             switch state {
             /* 1 */
             case .TEXT:
-                switch b {
+                switch codePoint {
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     break
                 case U_QUOTATION_MARK, U_APOSTROPHE:
                     if elementLevel == 0 && outerState == .TEXT {
-                        try error("non-whitespace \(characterCitation(b)) outside elements")
+                        try error("non-whitespace \(characterCitation(codePoint)) outside elements")
                     }
                     else if b == quoteSign {
                         if pos > parsedBefore {
@@ -270,19 +299,19 @@ public class XParser: Parser {
                         parsedBefore = pos + 1
                     }
                     else {
-                        try error("illegal \(characterCitation(b))")
+                        try error("illegal \(characterCitation(codePoint))")
                     }
                 default:
                     if elementLevel == 0 && outerState == .TEXT {
                         var whitespaceCheck = true
                         switch pos {
                         case 0: if b == U_BOM_1 { whitespaceCheck = false }
-                        case 1: if b == U_BOM_2 && lastB == U_BOM_1 { whitespaceCheck = false}
-                        case 2: if b == U_BOM_3 && lastB == U_BOM_2 && lastLastB == U_BOM_1 { whitespaceCheck = false }
+                        case 1: if b == U_BOM_2 && lastCodePoint == U_BOM_1 { whitespaceCheck = false}
+                        case 2: if b == U_BOM_3 && lastCodePoint == U_BOM_2 && lastLastCodePoint == U_BOM_1 { whitespaceCheck = false }
                         default: break
                         }
                         if whitespaceCheck {
-                            try error("non-whitespace \(characterCitation(b)) outside elements")
+                            try error("non-whitespace \(characterCitation(codePoint)) outside elements")
                         }
                     }
                     else {
@@ -291,7 +320,7 @@ public class XParser: Parser {
                 }
             /* 2 */
             case .START_OR_EMPTY_TAG, .XML_DECLARATION:
-                    switch b {
+                    switch codePoint {
                     case U_GREATER_THAN_SIGN:
                         if tokenStart >= 0 {
                             token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
@@ -302,7 +331,7 @@ public class XParser: Parser {
                             tokenStart = -1
                         }
                         if state == .XML_DECLARATION {
-                            try error("illegal \(characterCitation(b)) in declaration")
+                            try error("illegal \(characterCitation(codePoint)) in declaration")
                             state = .XML_DECLARATION_FINISHING
                         }
                         else {
@@ -357,7 +386,7 @@ public class XParser: Parser {
                         else if b == U_QUESTION_MARK {
                             state = .XML_DECLARATION_FINISHING
                         } else if b == U_SOLIDUS {
-                            try error("illegal \(characterCitation(b))")
+                            try error("illegal \(characterCitation(codePoint))")
                         }
                     case U_EQUALS_SIGN:
                         if tokenStart >= 0 {
@@ -375,20 +404,20 @@ public class XParser: Parser {
                         }
                     default:
                         if tokenStart > 0 {
-                            if !isNameCharacter(b) {
-                                try error("illegal \(characterCitation(b)) in token")
+                            if !isNameCharacter(codePoint) {
+                                try error("illegal \(characterCitation(codePoint)) in token")
                             }
                         }
                         else {
-                            if !isNameStartCharacter(b) {
-                                try error("illegal \(characterCitation(b)) at start of token")
+                            if !isNameStartCharacter(codePoint) {
+                                try error("illegal \(characterCitation(codePoint)) at start of token")
                             }
                             tokenStart = pos
                         }
                     }
             /* 3 */
             case .END_TAG:
-                switch b {
+                switch codePoint {
                 case U_GREATER_THAN_SIGN:
                     if tokenStart > 0 {
                         name = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
@@ -418,24 +447,24 @@ public class XParser: Parser {
                 default:
                     if name == nil {
                         if tokenStart > 0 {
-                            if !isNameCharacter(b) {
-                                try error("illegal \(characterCitation(b)) in element name")
+                            if !isNameCharacter(codePoint) {
+                                try error("illegal \(characterCitation(codePoint)) in element name")
                             }
                         }
                         else {
-                            if !isNameStartCharacter(b) {
-                                try error("illegal \(characterCitation(b)) at start of element name")
+                            if !isNameStartCharacter(codePoint) {
+                                try error("illegal \(characterCitation(codePoint)) at start of element name")
                             }
                             tokenStart = pos
                         }
                     }
                     else {
-                        try error("illegal \(characterCitation(b)) after element name in end tag")
+                        try error("illegal \(characterCitation(codePoint)) after element name in end tag")
                     }
                 }
             /* 4 */
             case .JUST_STARTED_WITH_LESS_THAN_SIGN:
-                switch b {
+                switch codePoint {
                 case U_SOLIDUS:
                     state = .END_TAG
                 case U_EXCLAMATION_MARK:
@@ -444,11 +473,11 @@ public class XParser: Parser {
                 case U_QUESTION_MARK:
                     state = .PROCESSING_INSTRUCTION
                 default:
-                    if isNameCharacter(b) {
+                    if isNameCharacter(codePoint) {
                         tokenStart = pos
                     }
                     else {
-                        try error("illegal \(characterCitation(b)) after \"<\"")
+                        try error("illegal \(characterCitation(codePoint)) after \"<\"")
                     }
                     state = .START_OR_EMPTY_TAG
                 }
@@ -572,7 +601,7 @@ public class XParser: Parser {
                 }
             /* 7 */
             case .PROCESSING_INSTRUCTION:
-                switch b {
+                switch codePoint {
                 case U_QUESTION_MARK, U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     if tokenStart > -1 {
                         name =  String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
@@ -586,7 +615,7 @@ public class XParser: Parser {
                         try error("illegal space at start of processing instruction")
                     }
                 case U_GREATER_THAN_SIGN:
-                    if lastB == U_QUESTION_MARK {
+                    if lastCodePoint == U_QUESTION_MARK {
                         if tokenStart >= 0 {
                             name =  String(decoding: data.subdata(in: tokenStart..<pos-1), as: UTF8.self)
                             tokenStart = -1
@@ -605,21 +634,21 @@ public class XParser: Parser {
                 default:
                     if name == nil {
                         if tokenStart < 0 {
-                            if !isNameStartCharacter(b) {
+                            if !isNameStartCharacter(codePoint) {
                                 try error("illegal character at start of processing instruction")
                             }
                             tokenStart = pos
                         }
-                        else if !isNameCharacter(b) {
-                            try error("illegal \(characterCitation(b)) in processing instruction target")
+                        else if !isNameCharacter(codePoint) {
+                            try error("illegal \(characterCitation(codePoint)) in processing instruction target")
                         }
                     }
                 }
             /* 8 */
             case .CDATA_SECTION:
-                switch b {
+                switch codePoint {
                 case U_GREATER_THAN_SIGN:
-                    if lastB == U_RIGHT_SQUARE_BRACKET && lastLastB == U_RIGHT_SQUARE_BRACKET {
+                    if lastCodePoint == U_RIGHT_SQUARE_BRACKET && lastLastCodePoint == U_RIGHT_SQUARE_BRACKET {
                         eventHandlers.forEach { eventHandler in eventHandler.cdataSection(text: String(decoding: data.subdata(in: parsedBefore..<pos-2), as: UTF8.self)) }
                         parsedBefore = pos + 1
                         state = outerState
@@ -630,25 +659,25 @@ public class XParser: Parser {
                 }
             /* 9 */
             case .COMMENT:
-                switch b {
+                switch codePoint {
                 case U_GREATER_THAN_SIGN:
-                    if lastB == U_HYPHEN_MINUS && lastLastB == U_HYPHEN_MINUS {
+                    if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS {
                         eventHandlers.forEach { eventHandler in eventHandler.comment(text: String(decoding: data.subdata(in: parsedBefore..<pos-2), as: UTF8.self)) }
                         parsedBefore = pos + 1
                         state = outerState
                         outerState = .TEXT
                     }
                 default:
-                    if lastB == U_HYPHEN_MINUS && lastLastB == U_HYPHEN_MINUS && pos > parsedBefore {
+                    if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS && pos > parsedBefore {
                         try error("\"--\" in comment not marking the end of it")
                     }
                 }
             /* 10 */
             case .DOCUMENT_TYPE_DECLARATION_HEAD, .ENTITY_DECLARATION, .NOTATION_DECLARATION:
-                switch b {
+                switch codePoint {
                 case U_LEFT_SQUARE_BRACKET, U_GREATER_THAN_SIGN:
                     if b == U_LEFT_SQUARE_BRACKET && !(state == .DOCUMENT_TYPE_DECLARATION_HEAD) {
-                        try error("illegal character \(characterCitation(b))")
+                        try error("illegal character \(characterCitation(codePoint))")
                         break
                     }
                     if tokenStart >= 0 {
@@ -829,7 +858,7 @@ public class XParser: Parser {
                     parsedBefore = pos + 1
                 case U_QUOTATION_MARK, U_APOSTROPHE:
                     if tokenStart >= 0 {
-                        try error("illegal \(characterCitation(b))")
+                        try error("illegal \(characterCitation(codePoint))")
                         items.append(tokenParseResult(value: String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)))
                         tokenStart = -1
                     }
@@ -844,13 +873,13 @@ public class XParser: Parser {
                     }
                 default:
                     if tokenStart > 0 {
-                        if !isNameCharacter(b) {
-                            try error("illegal \(characterCitation(b)) in element name")
+                        if !isNameCharacter(codePoint) {
+                            try error("illegal \(characterCitation(codePoint)) in element name")
                         }
                     }
                     else {
-                        if !(isNameStartCharacter(b) || (state == .ENTITY_DECLARATION && b == U_PERCENT_SIGN && items.count == 0)) {
-                            try error("illegal \(characterCitation(b)) in declaration")
+                        if !(isNameStartCharacter(codePoint) || (state == .ENTITY_DECLARATION && b == U_PERCENT_SIGN && items.count == 0)) {
+                            try error("illegal \(characterCitation(codePoint)) in declaration")
                         }
                         tokenStart = pos
                     }
@@ -1073,25 +1102,25 @@ public class XParser: Parser {
                 parsedBefore = pos + 1
             /* 12 */
             case .INTERNAL_SUBSET:
-                switch b {
+                switch codePoint {
                 case U_RIGHT_SQUARE_BRACKET:
                     state = .DOCUMENT_TYPE_DECLARATION_TAIL
                 case U_LESS_THAN_SIGN:
                     state = .JUST_STARTED_WITH_LESS_THAN_SIGN
                     outerState = .INTERNAL_SUBSET
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION, U_SOLIDUS:
-                    if lastB == U_LESS_THAN_SIGN {
+                    if lastCodePoint == U_LESS_THAN_SIGN {
                         try error("illegal \(U_LESS_THAN_SIGN) in internal subset")
                     }
                 default:
-                    if lastB == U_LESS_THAN_SIGN {
+                    if lastCodePoint == U_LESS_THAN_SIGN {
                         try error("illegal \(U_LESS_THAN_SIGN) in internal subset")
                     }
-                    try error("illegal \(characterCitation(b)) in internal subset")
+                    try error("illegal \(characterCitation(codePoint)) in internal subset")
                 }
             /* 13 */
             case .ELEMENT_DECLARATION, .ATTRIBUTE_LIST_DECLARATION:
-                switch b {
+                switch codePoint {
                 case U_LEFT_PARENTHESIS:
                     if quoteSign == 0 && tokenStart >= 0 {
                         token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
@@ -1199,7 +1228,7 @@ public class XParser: Parser {
                 }
             /* 15 */
             case .DOCUMENT_TYPE_DECLARATION_TAIL:
-                switch b {
+                switch codePoint {
                 case U_GREATER_THAN_SIGN:
                     state = .TEXT
                     isWhitespace = true
@@ -1207,12 +1236,12 @@ public class XParser: Parser {
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION, U_SOLIDUS:
                     break
                 default:
-                    try error("illegal \(characterCitation(b)) in document type declaration after internal subset")
+                    try error("illegal \(characterCitation(codePoint)) in document type declaration after internal subset")
                 }
             }
             
-            lastLastB = lastB
-            lastB = b
+            lastLastCodePoint = lastCodePoint
+            lastCodePoint = codePoint
         }
         pos += 1
         
