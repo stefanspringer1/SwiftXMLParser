@@ -1458,6 +1458,7 @@ public class XParser: Parser {
             lastColumn = column
         }
         binaryPosition += 1
+        column += 1
         
         if elementLevel > 0 {
             try error("document is not finished: \(elementLevel > 1 ? "elements" : "element") \(ancestors.peekAll().reversed().map{ "\"\($0)\"" }.joined(separator: ", ")) \(elementLevel > 1 ? "are" : "is") not closed")
