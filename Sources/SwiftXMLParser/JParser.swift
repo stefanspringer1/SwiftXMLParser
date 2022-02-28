@@ -52,10 +52,10 @@ public class JParser: Parser {
     ) throws {
         
         var line = 1
-        var row = 0
+        var column = 0
         
         func error(_ message: String, offset: Int = 0) throws {
-            throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(row):E: \(message)")
+            throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(column):E: \(message)")
         }
         
         func characterCitation(_ codePoint: UnicodeCodePoint) -> String {
@@ -67,7 +67,7 @@ public class JParser: Parser {
             }
         }
         
-        var pos = -1
+        var binaryPosition = -1
         
         var valueStart = -1
         
@@ -92,13 +92,20 @@ public class JParser: Parser {
         
         var bracketLevel = 0
         
-        eventHandlers.forEach { eventHandler in eventHandler.elementStart(name: rootName, attributes: nil) }
+        let sourceRangeStart = SourceRange(start: SourcePosition(binaryPosition: 0, line: 0, column: 0), end: SourcePosition(binaryPosition: 0, line: 0, column: 0))
+        eventHandlers.forEach { eventHandler in
+            eventHandler.elementStart(
+                name: rootName,
+                attributes: nil,
+                sourceRange: sourceRangeStart
+            )
+        }
         
         func getValue() throws -> String {
             if valueStart < 0 {
                 try error("wrong start index of value") // should not happen
             }
-            let value = String(decoding: data.subdata(in: valueStart..<pos), as: UTF8.self)
+            let value = String(decoding: data.subdata(in: valueStart..<binaryPosition), as: UTF8.self)
             valueStart = -1
             return value
         }
@@ -109,7 +116,7 @@ public class JParser: Parser {
         var lastCodePoint: UnicodeCodePoint = 0
         
         binaryLoop: for b in data {
-            pos += 1
+            binaryPosition += 1
             
             // check UTF-8 encoding:
             if expectedUTF8Rest > 0 {
@@ -152,13 +159,13 @@ public class JParser: Parser {
             
             if lastCodePoint == U_LINE_FEED {
                 line += 1
-                row = 0
+                column = 0
             }
             
             if let unicodeScalar = UnicodeScalar(codePoint) {
                 let unicodeScalarProperties = unicodeScalar.properties
                 if !(unicodeScalarProperties.isDiacritic || unicodeScalarProperties.isVariationSelector) {
-                    row += 1
+                    column += 1
                 }
             }
             else {
@@ -184,14 +191,20 @@ public class JParser: Parser {
                     bracketLevel += 1
                 case U_QUOTATION_MARK:
                     states.push(.TEXT)
-                    valueStart = pos + 1
+                    valueStart = binaryPosition + 1
                 case U_RIGHT_SQUARE_BRACKET:
                     _ = states.pop()
                     bracketLevel -= 1
                     switch states.pop() {
                     case .OBJECT_AWAITING_VALUE:
                         if let theElementName = elementNames.pop() {
-                            eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: theElementName) }
+                            let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.elementEnd(
+                                    name: theElementName,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         else {
                             try error("undefined state") // should not happen
@@ -204,8 +217,8 @@ public class JParser: Parser {
                     }
                 default:
                     var skip = false
-                    if (pos < 3) {
-                        switch pos {
+                    if (binaryPosition < 3) {
+                        switch binaryPosition {
                         case 0: if b == U_BOM_1 { skip = true }
                         case 1: if b == U_BOM_2 && data[0] == U_BOM_1 { skip = true }
                         case 2: if b == U_BOM_3 && data[1] == U_BOM_2 && data[0] == U_BOM_1 { skip = true }
@@ -214,14 +227,14 @@ public class JParser: Parser {
                     }
                     if !skip {
                         states.push(.NON_TEXT_VALUE)
-                        valueStart = pos
+                        valueStart = binaryPosition
                     }
                 }
             case .OBJECT_AWAITING_NAME:
                 switch codePoint {
                 case U_QUOTATION_MARK:
                     states.push(.TEXT)
-                    valueStart = pos + 1
+                    valueStart = binaryPosition + 1
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     break
                 default:
@@ -240,7 +253,7 @@ public class JParser: Parser {
             case .OBJECT_AWAITING_VALUE:
                 switch codePoint {
                 case U_QUOTATION_MARK:
-                    valueStart = pos + 1
+                    valueStart = binaryPosition + 1
                     states.push(.TEXT)
                 case U_LEFT_CURLY_BRACKET:
                     states.push(.OBJECT_AWAITING_NAME)
@@ -252,7 +265,7 @@ public class JParser: Parser {
                     break
                 default:
                     states.push(.NON_TEXT_VALUE)
-                    valueStart = pos
+                    valueStart = binaryPosition
                 }
             case .NON_TEXT_VALUE:
                 switch codePoint {
@@ -260,17 +273,47 @@ public class JParser: Parser {
                     _ = states.pop()
                     switch states.pop() {
                     case .ARRAY_AWAITING_THING:
-                        eventHandlers.forEach { eventHandler in eventHandler.elementStart(name: arrayItemName, attributes: nil) }
-                        try eventHandlers.forEach { eventHandler in eventHandler.text(text: try getValue(), whitespace: .UNKNOWN) }
-                        eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: arrayItemName) }
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementStart(
+                                name: arrayItemName,
+                                attributes: nil,
+                                sourceRange: sourceRange
+                            )
+                        }
+                        try eventHandlers.forEach { eventHandler in
+                            eventHandler.text(
+                                text: try getValue(),
+                                whitespace: .UNKNOWN,
+                                sourceRange: sourceRange
+                            )
+                        }
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementEnd(
+                                name: arrayItemName,
+                                sourceRange: sourceRange
+                            )
+                        }
                         states.push(.ARRAY_AWAITING_THING)
                     case .OBJECT_AWAITING_VALUE:
                         let value = try getValue()
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
                         if value != "null" {
-                            eventHandlers.forEach { eventHandler in eventHandler.text(text: value, whitespace: .UNKNOWN) }
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.text(
+                                    text: value,
+                                    whitespace: .UNKNOWN,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         if let theElementName = elementNames.pop() {
-                            eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: theElementName) }
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.elementEnd(
+                                    name: theElementName,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         else {
                             try error("undefined state") // should not happen
@@ -283,12 +326,30 @@ public class JParser: Parser {
                     _ = states.pop()
                     switch states.pop() {
                     case .ARRAY_AWAITING_THING:
-                        eventHandlers.forEach { eventHandler in eventHandler.elementStart(name: arrayItemName, attributes: nil) }
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementStart(
+                                name: arrayItemName,
+                                attributes: nil,
+                                sourceRange: sourceRange
+                            )
+                        }
                         let value = try getValue()
                         if value != "null" {
-                            eventHandlers.forEach { eventHandler in eventHandler.text(text: value, whitespace: .UNKNOWN) }
+                            eventHandlers.forEach {
+                                eventHandler in eventHandler.text(
+                                    text: value,
+                                    whitespace: .UNKNOWN,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
-                        eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: arrayItemName) }
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementEnd(
+                                name: arrayItemName,
+                                sourceRange: sourceRange
+                            )
+                        }
                         bracketLevel -= 1
                         switch states.pop() {
                         case .OBJECT_AWAITING_VALUE:
@@ -306,11 +367,23 @@ public class JParser: Parser {
                     switch states.pop() {
                     case .OBJECT_AWAITING_VALUE:
                         let value = try getValue()
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
                         if value != "null" {
-                            eventHandlers.forEach { eventHandler in eventHandler.text(text: value, whitespace: .UNKNOWN) }
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.text(
+                                    text: value,
+                                    whitespace: .UNKNOWN,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         if let theElementName = elementNames.pop() {
-                            eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: theElementName) }
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.elementEnd(
+                                    name: theElementName,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         else {
                             try error("undefined state") // should not happen
@@ -323,23 +396,53 @@ public class JParser: Parser {
                     switch states.pop() {
                     case .OBJECT_AWAITING_VALUE:
                         let value = try getValue()
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
                         if value != "null" {
-                            eventHandlers.forEach { eventHandler in eventHandler.text(text: value, whitespace: .UNKNOWN) }
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.text(
+                                    text: value,
+                                    whitespace: .UNKNOWN,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         if let theElementName = elementNames.pop() {
-                            eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: theElementName) }
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.elementEnd(
+                                    name: theElementName,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         else {
                             try error("undefined state") // should not happen
                         }
                         states.push(.OBJECT_AWAITING_COMMA_OR_END)
                     case .ARRAY_AWAITING_THING:
-                        eventHandlers.forEach { eventHandler in eventHandler.elementStart(name: arrayItemName, attributes: nil) }
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementStart(
+                                name: arrayItemName,
+                                attributes: nil,
+                                sourceRange: sourceRange
+                            )
+                        }
                         let value = try getValue()
                         if value != "null" {
-                            eventHandlers.forEach { eventHandler in eventHandler.text(text: value, whitespace: .UNKNOWN) }
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.text(
+                                    text: value,
+                                    whitespace: .UNKNOWN,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
-                        eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: arrayItemName) }
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementEnd(
+                                name: arrayItemName,
+                                sourceRange: sourceRange
+                            )
+                        }
                         states.push(.ARRAY_AWAITING_COMMA_OR_END)
                     default:
                         try error("undefined state") // should not happen
@@ -357,18 +460,55 @@ public class JParser: Parser {
                     _ = states.pop()
                     switch states.pop() {
                     case .ARRAY_AWAITING_THING:
-                        eventHandlers.forEach { eventHandler in eventHandler.elementStart(name: arrayItemName, attributes: nil) }
-                        eventHandlers.forEach { eventHandler in eventHandler.text(text: text, whitespace: .UNKNOWN) }
-                        eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: arrayItemName) }
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementStart(
+                                name: arrayItemName,
+                                attributes: nil,
+                                sourceRange: sourceRange
+                            )
+                        }
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.text(
+                                text: text,
+                                whitespace: .UNKNOWN,
+                                sourceRange: sourceRange
+                            )
+                        }
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementEnd(
+                                name: arrayItemName,
+                                sourceRange: sourceRange
+                            )
+                        }
                         states.push(.ARRAY_AWAITING_COMMA_OR_END)
                     case .OBJECT_AWAITING_NAME:
-                        eventHandlers.forEach { eventHandler in eventHandler.elementStart(name: text, attributes: nil) }
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementStart(
+                                name: text,
+                                attributes: nil,
+                                sourceRange: sourceRange
+                            )
+                        }
                         elementNames.push(text)
                         states.push(.OBJECT_AWAITING_COLON)
                     case .OBJECT_AWAITING_VALUE:
-                        eventHandlers.forEach { eventHandler in eventHandler.text(text: text, whitespace: .UNKNOWN) }
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.text(
+                                text: text,
+                                whitespace: .UNKNOWN,
+                                sourceRange: sourceRange
+                            )
+                        }
                         if let theElementName = elementNames.pop() {
-                            eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: theElementName) }
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.elementEnd(
+                                    name: theElementName,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         else {
                             try error("undefined state") // should not happen
@@ -391,7 +531,13 @@ public class JParser: Parser {
                     _ = states.pop()
                     if states.peek() == .OBJECT_AWAITING_VALUE {
                         if let theElementName = elementNames.pop() {
-                            eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: theElementName) }
+                            let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.elementEnd(
+                                    name: theElementName,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         else {
                             try error("undefined state") // should not happen
@@ -413,7 +559,13 @@ public class JParser: Parser {
                     _ = states.pop()
                     if states.peek() == .OBJECT_AWAITING_VALUE {
                         if let theElementName = elementNames.pop() {
-                            eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: theElementName) }
+                            let sourceRange = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.elementEnd(
+                                    name: theElementName,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         else {
                             try error("undefined state") // should not happen
@@ -431,12 +583,18 @@ public class JParser: Parser {
             }
             lastCodePoint = codePoint
         }
-        pos += 1
+        binaryPosition += 1
         
         if bracketLevel > 0 {
             try error("document not finished")
         }
         
-        eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: rootName) }
+        let sourceRangeEnd = SourceRange(start: SourcePosition(binaryPosition: binaryPosition, line: line, column: column), end: SourcePosition(binaryPosition: binaryPosition, line: line, column: column))
+        eventHandlers.forEach { eventHandler in
+            eventHandler.elementEnd(
+                name: rootName,
+                sourceRange: sourceRangeEnd
+            )
+        }
     }
 }

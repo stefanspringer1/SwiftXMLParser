@@ -70,10 +70,10 @@ public class XParser: Parser {
         eventHandlers: [XEventHandler]
     ) throws {
         var line = 1
-        var row = 0
+        var column = 0
         
         func error(_ message: String, offset: Int = 0) throws {
-            throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(row):E: \(message)")
+            throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(column):E: \(message)")
         }
         
         func characterCitation(_ codePoint: UnicodeCodePoint) -> String {
@@ -110,8 +110,10 @@ public class XParser: Parser {
                 .trimmingCharacters(in: .whitespaces)
         }
         
-        var pos = -1
+        var binaryPosition = -1
         var parsedBefore = 0
+        var startLine = 1
+        var startColumn = 1
         var outerParsedBefore = 0
         var possibleState = _DECLARATION_LIKE
         var unkownDeclarationOffset = 0
@@ -177,7 +179,7 @@ public class XParser: Parser {
         var lastLastCodePoint: UnicodeCodePoint = 0
         
         binaryLoop: for b in data {
-            pos += 1
+            binaryPosition += 1
             
             // check UTF-8 encoding:
             if expectedUTF8Rest > 0 {
@@ -220,13 +222,13 @@ public class XParser: Parser {
             
             if lastCodePoint == U_LINE_FEED {
                 line += 1
-                row = 0
+                column = 0
             }
             
             if let unicodeScalar = UnicodeScalar(codePoint) {
                 let unicodeScalarProperties = unicodeScalar.properties
                 if !(unicodeScalarProperties.isDiacritic || unicodeScalarProperties.isVariationSelector) {
-                    row += 1
+                    column += 1
                 }
             }
             else {
@@ -246,8 +248,8 @@ public class XParser: Parser {
                         try error("non-whitespace \(characterCitation(codePoint)) outside elements")
                     }
                     else if b == quoteSign {
-                        if pos > parsedBefore {
-                            texts.append(String(decoding: data.subdata(in: parsedBefore..<pos), as: UTF8.self))
+                        if binaryPosition > parsedBefore {
+                            texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                         }
                         if outerState == .START_OR_EMPTY_TAG || outerState == .XML_DECLARATION {
                             if !equalSignAfterToken {
@@ -259,27 +261,27 @@ public class XParser: Parser {
                             }
                         }
                         else {
-                            items.append(quotedParseResult(value: String(decoding: data.subdata(in: parsedBefore..<pos), as: UTF8.self)))
+                            items.append(quotedParseResult(value: String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self)))
                         }
                         texts.removeAll()
                         quoteSign = 0
                         state = outerState
                         outerState = .TEXT
-                        parsedBefore = pos + 1
+                        parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                     }
                     else {
                         isWhitespace = false
                     }
                 case U_AMPERSAND:
-                    if pos > parsedBefore {
-                        texts.append(String(decoding: data.subdata(in: parsedBefore..<pos), as: UTF8.self))
+                    if binaryPosition > parsedBefore {
+                        texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                     }
                     state = .ENTITY
-                    parsedBefore = pos + 1
+                    parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                 case U_LESS_THAN_SIGN:
                     if outerState == .TEXT {
-                        if pos > parsedBefore {
-                            texts.append(String(decoding: data.subdata(in: parsedBefore..<pos), as: UTF8.self))
+                        if binaryPosition > parsedBefore {
+                            texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                         }
                         if !texts.isEmpty {
                             if elementLevel > 0 {
@@ -289,14 +291,22 @@ public class XParser: Parser {
                                     }
                                 }
                                 else {
-                                    eventHandlers.forEach { eventHandler in eventHandler.text(text: texts.joined().replacingOccurrences(of: "\r\n", with: "\n"), whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE) }
+                                    let text = texts.joined().replacingOccurrences(of: "\r\n", with: "\n")
+                                    let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                                    eventHandlers.forEach { eventHandler in
+                                        eventHandler.text(
+                                            text: text,
+                                            whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
+                                            sourceRange: sourceRange
+                                        )
+                                    }
                                 }
                             }
                             texts.removeAll()
                         }
                         isWhitespace = true
                         state = .JUST_STARTED_WITH_LESS_THAN_SIGN
-                        parsedBefore = pos + 1
+                        parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                     }
                     else {
                         try error("illegal \(characterCitation(codePoint))")
@@ -304,7 +314,7 @@ public class XParser: Parser {
                 default:
                     if elementLevel == 0 && outerState == .TEXT {
                         var whitespaceCheck = true
-                        switch pos {
+                        switch binaryPosition {
                         case 0: if b == U_BOM_1 { whitespaceCheck = false }
                         case 1: if b == U_BOM_2 && lastCodePoint == U_BOM_1 { whitespaceCheck = false}
                         case 2: if b == U_BOM_3 && lastCodePoint == U_BOM_2 && lastLastCodePoint == U_BOM_1 { whitespaceCheck = false }
@@ -323,7 +333,7 @@ public class XParser: Parser {
                     switch codePoint {
                     case U_GREATER_THAN_SIGN:
                         if tokenStart >= 0 {
-                            token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                            token = String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
                             if name == nil {
                                 name = token
                                 token = nil
@@ -346,11 +356,24 @@ public class XParser: Parser {
                             if elementLevel == 0 && someElement {
                                 try error("multiple root elements")
                             }
+                            let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
                             if attributes.isEmpty {
-                                eventHandlers.forEach { eventHandler in eventHandler.elementStart(name: name ?? "", attributes: nil) }
+                                eventHandlers.forEach { eventHandler in
+                                    eventHandler.elementStart(
+                                        name: name ?? "",
+                                        attributes: nil,
+                                        sourceRange: sourceRange
+                                    )
+                                }
                             }
                             else {
-                                eventHandlers.forEach { eventHandler in eventHandler.elementStart(name: name ?? "", attributes: attributes) }
+                                eventHandlers.forEach { eventHandler in
+                                    eventHandler.elementStart(
+                                        name: name ?? "",
+                                        attributes: attributes,
+                                        sourceRange: sourceRange
+                                    )
+                                }
                                 attributes = [String:String]()
                             }
                             someElement = true
@@ -359,7 +382,7 @@ public class XParser: Parser {
                             name = nil
                             state = .TEXT
                             isWhitespace = true
-                            parsedBefore = pos + 1
+                            parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                         }
                     case U_QUOTATION_MARK, U_APOSTROPHE:
                         if tokenStart > 0 {
@@ -368,10 +391,10 @@ public class XParser: Parser {
                         quoteSign = b
                         outerState = state
                         state = .TEXT
-                        parsedBefore = pos + 1
+                        parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                     case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION, U_SOLIDUS, U_QUESTION_MARK:
                         if tokenStart >= 0 {
-                            token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                            token = String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
                             if name == nil {
                                 name = token
                                 token = nil
@@ -393,7 +416,7 @@ public class XParser: Parser {
                             if token != nil {
                                 try error("multiple subsequent tokens")
                             }
-                            token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                            token = String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
                             tokenStart = -1
                         }
                         if token != nil {
@@ -412,7 +435,7 @@ public class XParser: Parser {
                             if !isNameStartCharacter(codePoint) {
                                 try error("illegal \(characterCitation(codePoint)) at start of token")
                             }
-                            tokenStart = pos
+                            tokenStart = binaryPosition
                         }
                     }
             /* 3 */
@@ -420,7 +443,7 @@ public class XParser: Parser {
                 switch codePoint {
                 case U_GREATER_THAN_SIGN:
                     if tokenStart > 0 {
-                        name = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                        name = String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
                         tokenStart = -1
                     }
                     if name == nil {
@@ -429,16 +452,22 @@ public class XParser: Parser {
                     if (name ?? "") != ancestors.peek() {
                         try error("name end tag \"\(name ?? "")\" does not match name of open element \"\(ancestors.peek() ?? "")\"")
                     }
-                    eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: name ?? "") }
+                    let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                    eventHandlers.forEach { eventHandler in
+                        eventHandler.elementEnd(
+                            name: name ?? "",
+                            sourceRange: sourceRange
+                        )
+                    }
                     _ = ancestors.pop()
                     elementLevel -= 1
                     name = nil
                     state = .TEXT
                     isWhitespace = true
-                    parsedBefore = pos + 1
+                    parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     if tokenStart > 0 {
-                        name = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                        name = String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
                         tokenStart = 0
                     }
                     else if name == nil {
@@ -455,7 +484,7 @@ public class XParser: Parser {
                             if !isNameStartCharacter(codePoint) {
                                 try error("illegal \(characterCitation(codePoint)) at start of element name")
                             }
-                            tokenStart = pos
+                            tokenStart = binaryPosition
                         }
                     }
                     else {
@@ -469,12 +498,12 @@ public class XParser: Parser {
                     state = .END_TAG
                 case U_EXCLAMATION_MARK:
                     state = .UNKNOWN_DECLARATION_LIKE
-                    outerParsedBefore = pos - 1
+                    outerParsedBefore = binaryPosition - 1; startLine = line; startColumn = column
                 case U_QUESTION_MARK:
                     state = .PROCESSING_INSTRUCTION
                 default:
                     if isNameCharacter(codePoint) {
-                        tokenStart = pos
+                        tokenStart = binaryPosition
                     }
                     else {
                         try error("illegal \(characterCitation(codePoint)) after \"<\"")
@@ -484,7 +513,7 @@ public class XParser: Parser {
             /* 5 */
             case .ENTITY:
                 if b == U_SEMICOLON {
-                    let entityText = String(decoding: data.subdata(in: parsedBefore..<pos), as: UTF8.self)
+                    let entityText = String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self)
                     if elementLevel == 0 && outerState == .TEXT {
                         try error("entity \"\(entityText)\" outside elements")
                     }
@@ -544,17 +573,36 @@ public class XParser: Parser {
                                     }
                                 }
                                 else {
-                                    eventHandlers.forEach { eventHandler in eventHandler.text(text: text.replacingOccurrences(of: "\r\n", with: "\n"), whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE) }
+                                    let text = text.replacingOccurrences(of: "\r\n", with: "\n")
+                                    let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                                    eventHandlers.forEach { eventHandler in
+                                        eventHandler.text(
+                                            text: text,
+                                            whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
+                                            sourceRange: sourceRange
+                                        )
+                                    }
                                 }
                             }
                             texts.removeAll()
                             isWhitespace = true
                         }
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
                         if isExternal {
-                            eventHandlers.forEach { eventHandler in eventHandler.externalEntity(name: entityText) }
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.externalEntity(
+                                    name: entityText,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         else {
-                            eventHandlers.forEach { eventHandler in eventHandler.internalEntity(name: entityText) }
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.internalEntity(
+                                    name: entityText,
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                     }
                     else {
@@ -567,7 +615,7 @@ public class XParser: Parser {
                         }
                     }
                     state = .TEXT
-                    parsedBefore = pos + 1
+                    parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                 }
             /* 6 */
             case .EMPTY_TAG_FINISHING:
@@ -582,19 +630,37 @@ public class XParser: Parser {
                     if elementLevel == 0 && someElement {
                         try error("multiple root elements")
                     }
+                    let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
                     if attributes.isEmpty {
-                        eventHandlers.forEach { eventHandler in eventHandler.elementStart(name: name ?? "", attributes: nil) }
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementStart(
+                                name: name ?? "",
+                                attributes: nil,
+                                sourceRange: sourceRange
+                            )
+                        }
                     }
                     else {
-                        eventHandlers.forEach { eventHandler in eventHandler.elementStart(name: name ?? "", attributes: attributes) }
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.elementStart(
+                                name: name ?? "",
+                                attributes: attributes,
+                                sourceRange: sourceRange
+                            )
+                        }
                         attributes = [String:String]()
                     }
-                    eventHandlers.forEach { eventHandler in eventHandler.elementEnd(name: name ?? "") }
+                    eventHandlers.forEach { eventHandler in
+                        eventHandler.elementEnd(
+                            name: name ?? "",
+                            sourceRange: sourceRange
+                        )
+                    }
                     someElement = true
                     name = nil
                     state = .TEXT
                     isWhitespace = true
-                    parsedBefore = pos + 1
+                    parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                 }
                 else {
                     try error("expecting \(characterCitation(U_GREATER_THAN_SIGN)) to end empty tag")
@@ -604,9 +670,9 @@ public class XParser: Parser {
                 switch codePoint {
                 case U_QUESTION_MARK, U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     if tokenStart > -1 {
-                        name =  String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                        name =  String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
                         tokenStart = -1
-                        parsedBefore = pos + 1
+                        parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                         if name == "xml" {
                             state = .XML_DECLARATION
                         }
@@ -617,17 +683,25 @@ public class XParser: Parser {
                 case U_GREATER_THAN_SIGN:
                     if lastCodePoint == U_QUESTION_MARK {
                         if tokenStart >= 0 {
-                            name =  String(decoding: data.subdata(in: tokenStart..<pos-1), as: UTF8.self)
+                            name =  String(decoding: data.subdata(in: tokenStart..<binaryPosition-1), as: UTF8.self)
                             tokenStart = -1
                         }
                         if let target = name {
-                            eventHandlers.forEach { eventHandler in eventHandler.processingInstruction(target: target, data: parsedBefore<pos-1 ? String(decoding: data.subdata(in: parsedBefore..<pos-1), as: UTF8.self): nil) }
+                            let data = parsedBefore<binaryPosition-1 ? String(decoding: data.subdata(in: parsedBefore..<binaryPosition-1), as: UTF8.self): nil
+                            let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                            eventHandlers.forEach { eventHandler in
+                                eventHandler.processingInstruction(
+                                    target: target,
+                                    data: data,
+                                    sourceRange: sourceRange
+                                )
+                            }
                             name = nil
                         }
                         else {
                             try error("procesing instruction without target")
                         }
-                        parsedBefore = pos + 1
+                        parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                         state = outerState
                         outerState = .TEXT
                     }
@@ -637,7 +711,7 @@ public class XParser: Parser {
                             if !isNameStartCharacter(codePoint) {
                                 try error("illegal character at start of processing instruction")
                             }
-                            tokenStart = pos
+                            tokenStart = binaryPosition
                         }
                         else if !isNameCharacter(codePoint) {
                             try error("illegal \(characterCitation(codePoint)) in processing instruction target")
@@ -649,8 +723,15 @@ public class XParser: Parser {
                 switch codePoint {
                 case U_GREATER_THAN_SIGN:
                     if lastCodePoint == U_RIGHT_SQUARE_BRACKET && lastLastCodePoint == U_RIGHT_SQUARE_BRACKET {
-                        eventHandlers.forEach { eventHandler in eventHandler.cdataSection(text: String(decoding: data.subdata(in: parsedBefore..<pos-2), as: UTF8.self)) }
-                        parsedBefore = pos + 1
+                        let text = String(decoding: data.subdata(in: parsedBefore..<binaryPosition-2), as: UTF8.self)
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.cdataSection(
+                                text: text,
+                                sourceRange: sourceRange
+                            )
+                        }
+                        parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                         state = outerState
                         outerState = .TEXT
                     }
@@ -662,13 +743,20 @@ public class XParser: Parser {
                 switch codePoint {
                 case U_GREATER_THAN_SIGN:
                     if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS {
-                        eventHandlers.forEach { eventHandler in eventHandler.comment(text: String(decoding: data.subdata(in: parsedBefore..<pos-2), as: UTF8.self)) }
-                        parsedBefore = pos + 1
+                        let text = String(decoding: data.subdata(in: parsedBefore..<binaryPosition-2), as: UTF8.self)
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.comment(
+                                text: text,
+                                sourceRange: sourceRange
+                            )
+                        }
+                        parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                         state = outerState
                         outerState = .TEXT
                     }
                 default:
-                    if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS && pos > parsedBefore {
+                    if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS && binaryPosition > parsedBefore {
                         try error("\"--\" in comment not marking the end of it")
                     }
                 }
@@ -681,7 +769,7 @@ public class XParser: Parser {
                         break
                     }
                     if tokenStart >= 0 {
-                        items.append(tokenParseResult(value: String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)))
+                        items.append(tokenParseResult(value: String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)))
                         tokenStart = -1
                     }
                     
@@ -695,12 +783,20 @@ public class XParser: Parser {
                         }
                         if !items.isEmpty, let name = (items[0] as? tokenParseResult)?.value {
                             var success = false
+                            let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
                             if items.count >= 3, let theToken = (items[1] as? tokenParseResult)?.value {
                                 if theToken == "SYSTEM" {
                                     if items.count == 3,
                                        let publicID = (items[2] as? quotedParseResult)?.value
                                     {
-                                        eventHandlers.forEach { eventHandler in eventHandler.documentTypeDeclaration(type: name, publicID: publicID, systemID: nil) }
+                                        eventHandlers.forEach { eventHandler in
+                                            eventHandler.documentTypeDeclaration(
+                                                type: name,
+                                                publicID: publicID,
+                                                systemID: nil,
+                                                sourceRange: sourceRange
+                                            )
+                                        }
                                         success = true
                                     }
                                 }
@@ -708,7 +804,14 @@ public class XParser: Parser {
                                     if items.count == 3 {
                                         if let publicID = (items[2] as? quotedParseResult)?.value
                                            {
-                                            eventHandlers.forEach { eventHandler in eventHandler.documentTypeDeclaration(type: name, publicID: publicID, systemID:  nil) }
+                                            eventHandlers.forEach { eventHandler in
+                                                eventHandler.documentTypeDeclaration(
+                                                    type: name,
+                                                    publicID: publicID,
+                                                    systemID:  nil,
+                                                    sourceRange: sourceRange
+                                                )
+                                            }
                                             success = true
                                         }
                                     }
@@ -716,14 +819,28 @@ public class XParser: Parser {
                                         if let publicID = (items[2] as? quotedParseResult)?.value,
                                            let systemID = (items[3] as? quotedParseResult)?.value
                                         {
-                                            eventHandlers.forEach { eventHandler in eventHandler.documentTypeDeclaration(type: name, publicID: publicID, systemID: systemID) }
+                                            eventHandlers.forEach { eventHandler in
+                                                eventHandler.documentTypeDeclaration(
+                                                    type: name,
+                                                    publicID: publicID,
+                                                    systemID: systemID,
+                                                    sourceRange: sourceRange
+                                                )
+                                            }
                                             success = true
                                         }
                                     }
                                 }
                             }
                             else {
-                                eventHandlers.forEach { eventHandler in eventHandler.documentTypeDeclaration(type: name, publicID: nil, systemID: nil) }
+                                eventHandlers.forEach { eventHandler in
+                                    eventHandler.documentTypeDeclaration(
+                                        type: name,
+                                        publicID: nil,
+                                        systemID: nil,
+                                        sourceRange: sourceRange
+                                    )
+                                }
                                 success = true
                             }
                             if success {
@@ -737,7 +854,7 @@ public class XParser: Parser {
                             try error("missing type in document type declaration")
                         }
                         state = b == U_LEFT_SQUARE_BRACKET ? .INTERNAL_SUBSET : .TEXT
-                        parsedBefore = pos + 1
+                        parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                     case .ENTITY_DECLARATION:
                         var success = false
                         if !items.isEmpty, let entityName = (items[0] as? tokenParseResult)?.value {
@@ -751,7 +868,14 @@ public class XParser: Parser {
                                     if declaredParameterEntityNames.contains(realEntityName) {
                                         try error("parameter entity with name \"\(realEntityName)\" declared more than once")
                                     }
-                                    eventHandlers.forEach { eventHandler in eventHandler.parameterEntityDeclaration(name: realEntityName, value: value) }
+                                    let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                                    eventHandlers.forEach { eventHandler in
+                                        eventHandler.parameterEntityDeclaration(
+                                            name: realEntityName,
+                                            value: value,
+                                            sourceRange: sourceRange
+                                        )
+                                    }
                                     declaredParameterEntityNames.insert(realEntityName)
                                     success = true
                                 }
@@ -761,7 +885,14 @@ public class XParser: Parser {
                                     if declaredEntityNames.contains(entityName) {
                                         try error("entity with name \"\(entityName)\" declared more than once")
                                     }
-                                    eventHandlers.forEach { eventHandler in eventHandler.internalEntityDeclaration(name: entityName, value: value) }
+                                    let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                                    eventHandlers.forEach { eventHandler in
+                                        eventHandler.internalEntityDeclaration(
+                                            name: entityName,
+                                            value: value,
+                                            sourceRange: sourceRange
+                                        )
+                                    }
                                     declaredEntityNames.insert(entityName)
                                     success = true
                                 }
@@ -785,7 +916,16 @@ public class XParser: Parser {
                                                 if declaredEntityNames.contains(entityName) {
                                                     try error("entity with name \"\(entityName)\" declared more than once")
                                                 }
-                                                eventHandlers.forEach { eventHandler in eventHandler.unparsedEntityDeclaration(name: entityName, publicID: publicValue, systemID: systemValue, notation: notation.value) }
+                                                let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                                                eventHandlers.forEach { eventHandler in
+                                                    eventHandler.unparsedEntityDeclaration(
+                                                        name: entityName,
+                                                        publicID: publicValue,
+                                                        systemID: systemValue,
+                                                        notation: notation.value,
+                                                        sourceRange: sourceRange
+                                                    )
+                                                }
                                                 externalEntityNames.insert(entityName)
                                                 declaredEntityNames.insert(entityName)
                                                 success = true
@@ -795,7 +935,15 @@ public class XParser: Parser {
                                             if declaredEntityNames.contains(entityName) {
                                                 try error("entity with name \"\(entityName)\" declared more than once")
                                             }
-                                            eventHandlers.forEach { eventHandler in eventHandler.externalEntityDeclaration(name: entityName, publicID: publicValue, systemID: systemValue) }
+                                            let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                                            eventHandlers.forEach { eventHandler in
+                                                eventHandler.externalEntityDeclaration(
+                                                    name: entityName,
+                                                    publicID: publicValue,
+                                                    systemID: systemValue,
+                                                    sourceRange: sourceRange
+                                                )
+                                            }
                                             externalEntityNames.insert(entityName)
                                             declaredEntityNames.insert(entityName)
                                             success = true
@@ -823,7 +971,15 @@ public class XParser: Parser {
                                         if declaredNotationNames.contains(notationName) {
                                             try error("notation \"\(notationName)\" declared more than once")
                                         }
-                                        eventHandlers.forEach { eventHandler in eventHandler.notationDeclaration(name: notationName, publicID: publicValue, systemID: systemValue) }
+                                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                                        eventHandlers.forEach { eventHandler in
+                                            eventHandler.notationDeclaration(
+                                                name: notationName,
+                                                publicID: publicValue,
+                                                systemID: systemValue,
+                                                sourceRange: sourceRange
+                                            )
+                                        }
                                         declaredNotationNames.insert(notationName)
                                         success = true
                                     }
@@ -834,11 +990,26 @@ public class XParser: Parser {
                                         if declaredNotationNames.contains(notationName) {
                                             try error("notation \"\(notationName)\" declared more than once")
                                         }
+                                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
                                         if hasPublicToken {
-                                            eventHandlers.forEach { eventHandler in eventHandler.notationDeclaration(name: notationName, publicID: publicOrSystemValue, systemID: nil) }
+                                            eventHandlers.forEach { eventHandler in
+                                                eventHandler.notationDeclaration(
+                                                    name: notationName,
+                                                    publicID: publicOrSystemValue,
+                                                    systemID: nil,
+                                                    sourceRange: sourceRange
+                                                )
+                                            }
                                         }
                                         else {
-                                            eventHandlers.forEach { eventHandler in eventHandler.notationDeclaration(name: notationName, publicID: nil, systemID: publicOrSystemValue) }
+                                            eventHandlers.forEach { eventHandler in
+                                                eventHandler.notationDeclaration(
+                                                    name: notationName,
+                                                    publicID: nil,
+                                                    systemID: publicOrSystemValue,
+                                                    sourceRange: sourceRange
+                                                )
+                                            }
                                         }
                                         declaredNotationNames.insert(notationName)
                                         success = true
@@ -855,20 +1026,20 @@ public class XParser: Parser {
                     items.removeAll()
                     state = .INTERNAL_SUBSET
                     outerState = .TEXT
-                    parsedBefore = pos + 1
+                    parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                 case U_QUOTATION_MARK, U_APOSTROPHE:
                     if tokenStart >= 0 {
                         try error("illegal \(characterCitation(codePoint))")
-                        items.append(tokenParseResult(value: String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)))
+                        items.append(tokenParseResult(value: String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)))
                         tokenStart = -1
                     }
                     quoteSign = b
-                    parsedBefore = pos + 1
+                    parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                     outerState = state
                     state = .TEXT
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     if tokenStart >= 0 {
-                        items.append(tokenParseResult(value: String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)))
+                        items.append(tokenParseResult(value: String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)))
                         tokenStart = -1
                     }
                 default:
@@ -881,7 +1052,7 @@ public class XParser: Parser {
                         if !(isNameStartCharacter(codePoint) || (state == .ENTITY_DECLARATION && b == U_PERCENT_SIGN && items.count == 0)) {
                             try error("illegal \(characterCitation(codePoint)) in declaration")
                         }
-                        tokenStart = pos
+                        tokenStart = binaryPosition
                     }
                 }
             /* 11 */
@@ -1099,7 +1270,7 @@ public class XParser: Parser {
                     unkownDeclarationOffset = 0
                 }
                 
-                parsedBefore = pos + 1
+                parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
             /* 12 */
             case .INTERNAL_SUBSET:
                 switch codePoint {
@@ -1123,15 +1294,16 @@ public class XParser: Parser {
                 switch codePoint {
                 case U_LEFT_PARENTHESIS:
                     if quoteSign == 0 && tokenStart >= 0 {
-                        token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                        token = String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
                         tokenStart = -1
                     }
                 case U_GREATER_THAN_SIGN:
                     if quoteSign == 0 {
                         if tokenStart >= 0 {
-                            token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                            token = String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
                             tokenStart = -1
                         }
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
                         if state == .ELEMENT_DECLARATION {
                             if outerState != .INTERNAL_SUBSET {
                                 try error("element declaration outside internal subset")
@@ -1140,7 +1312,14 @@ public class XParser: Parser {
                                 if declaredElementNames.contains(theToken) {
                                     try error("element type \"\(theToken)\" declared more than once")
                                 }
-                                eventHandlers.forEach { eventHandler in eventHandler.elementDeclaration(name: theToken, literal: String(decoding: data.subdata(in: outerParsedBefore..<pos+1), as: UTF8.self)) }
+                                let literal = String(decoding: data.subdata(in: outerParsedBefore..<binaryPosition+1), as: UTF8.self)
+                                eventHandlers.forEach { eventHandler in
+                                    eventHandler.elementDeclaration(
+                                        name: theToken,
+                                        literal: literal,
+                                        sourceRange: sourceRange
+                                    )
+                                }
                                 declaredElementNames.insert(theToken)
                             }
                             else {
@@ -1157,16 +1336,23 @@ public class XParser: Parser {
                                 if declaredAttributeListNames.contains(theToken) {
                                     try error("attribute list for element type \"\(theToken)\" declared more than once")
                                 }
-                                eventHandlers.forEach { eventHandler in eventHandler.attributeListDeclaration(name: theToken, literal: String(decoding: data.subdata(in: outerParsedBefore..<pos+1), as: UTF8.self)) }
+                                let literal = String(decoding: data.subdata(in: outerParsedBefore..<binaryPosition+1), as: UTF8.self)
+                                eventHandlers.forEach { eventHandler in
+                                    eventHandler.attributeListDeclaration(
+                                        name: theToken,
+                                        literal: literal,
+                                        sourceRange: sourceRange
+                                    )
+                                }
                                 declaredAttributeListNames.insert(theToken)
                             }
                             else {
-                                try error("element declaration without name")
+                                try error("attribute list declaration without name")
                             }
                             
                             token = nil
                         }
-                        parsedBefore = pos + 1
+                        parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                         state = outerState; outerState = .TEXT
                     }
                 case U_QUOTATION_MARK, U_APOSTROPHE:
@@ -1175,19 +1361,19 @@ public class XParser: Parser {
                     }
                     else {
                         if tokenStart >= 0 {
-                            token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                            token = String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
                             tokenStart = -1
                         }
                         quoteSign = b
                     }
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     if tokenStart >= 0 {
-                        token = String(decoding: data.subdata(in: tokenStart..<pos), as: UTF8.self)
+                        token = String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
                         tokenStart = -1
                     }
                 default:
                     if token == nil && tokenStart < 0 {
-                        tokenStart = pos
+                        tokenStart = binaryPosition
                     }
                 }
             /* 14 */
@@ -1212,7 +1398,15 @@ public class XParser: Parser {
                         }
                     }
                     if let theVersion = version {
-                        eventHandlers.forEach { eventHandler in eventHandler.xmlDeclaration(version: theVersion, encoding: encoding, standalone: standalone) }
+                        let sourceRange = SourceRange(start: SourcePosition(binaryPosition: parsedBefore, line: startLine, column: startColumn), end: SourcePosition(binaryPosition: binaryPosition-1, line: column, column: column))
+                        eventHandlers.forEach { eventHandler in
+                            eventHandler.xmlDeclaration(
+                                version: theVersion,
+                                encoding: encoding,
+                                standalone: standalone,
+                                sourceRange: sourceRange
+                            )
+                        }
                     }
                     else {
                         try error("uncomplete XML declaration, at least the version should be set")
@@ -1221,7 +1415,7 @@ public class XParser: Parser {
                     attributes = [String:String]()
                     state = .TEXT
                     isWhitespace = true
-                    parsedBefore = pos + 1
+                    parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                 }
                 else {
                     try error("expecting \(characterCitation(U_GREATER_THAN_SIGN)) to end XML declaration")
@@ -1232,7 +1426,7 @@ public class XParser: Parser {
                 case U_GREATER_THAN_SIGN:
                     state = .TEXT
                     isWhitespace = true
-                    parsedBefore = pos + 1
+                    parsedBefore = binaryPosition + 1; startLine = line; startColumn = column
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION, U_SOLIDUS:
                     break
                 default:
@@ -1243,7 +1437,7 @@ public class XParser: Parser {
             lastLastCodePoint = lastCodePoint
             lastCodePoint = codePoint
         }
-        pos += 1
+        binaryPosition += 1
         
         if elementLevel > 0 {
             try error("document is not finished: \(elementLevel > 1 ? "elements" : "element") \(ancestors.peekAll().reversed().map{ "\"\($0)\"" }.joined(separator: ", ")) \(elementLevel > 1 ? "are" : "is") not closed")
