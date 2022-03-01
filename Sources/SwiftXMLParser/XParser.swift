@@ -115,6 +115,14 @@ public class XParser: Parser {
         var mainParsedBefore = 1
         var mainStartLine = 1
         var mainStartColumn = 1
+        
+        // entities:
+        var entityBinaryStart = 1
+        var entityStartLine = 1
+        var entityStartColumn = 1
+        var beforeEntityLine = 1
+        var beforeEntityColumn = 1
+        
         var outerParsedBefore = 0
         var possibleState = _DECLARATION_LIKE
         var unkownDeclarationOffset = 0
@@ -173,22 +181,26 @@ public class XParser: Parser {
         var declaredAttributeListNames: Set<String> = []
         var declaredParameterEntityNames: Set<String> = []
         
-        var setMainStartOnNextCodePoint = false
-        
         @inline(__always) func setMainStart(delayed: Bool = false) {
-            mainParsedBefore = parsedBefore + (delayed ? 1 : 0); mainStartLine = line; mainStartColumn = column
+            mainParsedBefore = binaryPosition + (delayed ? 1 : 0)
+            mainStartLine = line
+            mainStartColumn = column + (delayed ? 1 : 0)
         }
         
-        @inline(__always) func broadcast(forText: Bool = false, processEventHandlers: (XEventHandler,SourceRange) -> ()) {
+        @inline(__always) func broadcast(
+            endLine: Int = line, endColumn: Int = column, binaryUntil: Int = binaryPosition + 1,
+            processEventHandlers: (XEventHandler,SourceRange
+        ) -> ()) {
             let sourceRange = SourceRange(
-                start: SourcePosition(binaryPosition: mainParsedBefore, line: mainStartLine, column: mainStartColumn),
-                end: SourcePosition(binaryPosition: forText ? binaryPosition : binaryPosition+1, line: forText ? lastLine : line, column: forText ? lastColumn : column)
+                startLine: mainStartLine,
+                startColumn: mainStartColumn,
+                endLine: endLine,
+                endColumn: endColumn,
+                binaryStart: mainParsedBefore,
+                binaryUntil: binaryUntil
             )
             eventHandlers.forEach { eventHandler in
                 processEventHandlers(eventHandler,sourceRange)
-            }
-            if !forText {
-                setMainStartOnNextCodePoint = true
             }
         }
         
@@ -257,11 +269,6 @@ public class XParser: Parser {
                 try error("x\(String(format: "%X", codePoint)) is not a Unicode codepoint")
             }
             
-            if setMainStartOnNextCodePoint {
-                setMainStart(delayed: true)
-                setMainStartOnNextCodePoint = false
-            }
-            
             //print("@ \(line):\(column) (\(binaryPosition)): \(outerState)/\(state): \(characterCitation(codePoint)) (WHITESPACE: \(isWhitespace))")
             
             switch state {
@@ -304,8 +311,12 @@ public class XParser: Parser {
                         texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                     }
                     state = .ENTITY
+                    entityBinaryStart = binaryPosition
+                    entityStartLine = line
+                    entityStartColumn = column
+                    beforeEntityLine = lastLine
+                    beforeEntityColumn = lastColumn
                     parsedBefore = binaryPosition + 1
-                    setMainStart()
                 case U_LESS_THAN_SIGN:
                     if outerState == .TEXT {
                         if binaryPosition > parsedBefore {
@@ -320,7 +331,9 @@ public class XParser: Parser {
                                 }
                                 else {
                                     let text = texts.joined().replacingOccurrences(of: "\r\n", with: "\n")
-                                    broadcast(forText: true) { (eventHandler,sourceRange) in
+                                    broadcast(
+                                        endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryPosition
+                                    ) { (eventHandler,sourceRange) in
                                         eventHandler.text(
                                             text: text,
                                             whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
@@ -410,7 +423,7 @@ public class XParser: Parser {
                             state = .TEXT
                             isWhitespace = true
                             parsedBefore = binaryPosition + 1
-                            setMainStart()
+                            setMainStart(delayed: true)
                         }
                     case U_QUOTATION_MARK, U_APOSTROPHE:
                         if tokenStart > 0 {
@@ -602,7 +615,9 @@ public class XParser: Parser {
                                 }
                                 else {
                                     let text = text.replacingOccurrences(of: "\r\n", with: "\n")
-                                    broadcast(forText: true) { (eventHandler,sourceRange) in
+                                    broadcast(
+                                        endLine: beforeEntityLine, endColumn: beforeEntityColumn, binaryUntil: entityBinaryStart
+                                    ) { (eventHandler,sourceRange) in
                                         eventHandler.text(
                                             text: text,
                                             whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
@@ -614,6 +629,9 @@ public class XParser: Parser {
                             texts.removeAll()
                             isWhitespace = true
                         }
+                        mainParsedBefore = entityBinaryStart
+                        mainStartLine = entityStartLine
+                        mainStartColumn = entityStartColumn
                         if isExternal {
                             broadcast { (eventHandler,sourceRange) in
                                 eventHandler.externalEntity(
@@ -630,6 +648,7 @@ public class XParser: Parser {
                                 )
                             }
                         }
+                        setMainStart(delayed: true)
                     }
                     else {
                         let descriptionStart = isExternal ? "misplaced external" : "remaining internal"
@@ -640,9 +659,8 @@ public class XParser: Parser {
                             try error("\(descriptionStart) entity \"\(entityText)\" in striclty textual content")
                         }
                     }
-                    state = .TEXT
                     parsedBefore = binaryPosition + 1
-                    setMainStart()
+                    state = .TEXT
                 }
             /* 6 */
             case .EMPTY_TAG_FINISHING:
@@ -687,7 +705,7 @@ public class XParser: Parser {
                     state = .TEXT
                     isWhitespace = true
                     parsedBefore = binaryPosition + 1
-                    setMainStart()
+                    setMainStart(delayed: true)
                 }
                 else {
                     try error("expecting \(characterCitation(U_GREATER_THAN_SIGN)) to end empty tag")
