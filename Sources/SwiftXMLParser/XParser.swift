@@ -591,7 +591,7 @@ public class XParser: Parser {
                                 resolution = String(uni)
                             }
                             else {
-                                try error("could not convert numerical character reference &\(entityText);")
+                                try error("numerical character reference &\(entityText); does not correspond to a valid Unicode codepoint")
                             }
                         }
                         else {
