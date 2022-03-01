@@ -115,6 +115,9 @@ public class JParser: Parser {
         var codePoint: UnicodeCodePoint = 0
         var lastCodePoint: UnicodeCodePoint = 0
         
+        var shift = 0
+        var binaryPositionOffset = 0
+        
         binaryLoop: for b in data {
             binaryPosition += 1
             
@@ -123,23 +126,33 @@ public class JParser: Parser {
                 if b & 0b10000000 == 0 || b & 0b01000000 > 0 {
                     try error("wrong UTF-8 encoding: expecting follow-up byte 10xxxxxx")
                 }
-                codePoint |= UnicodeCodePoint(b << 2)
+                codePoint |= UnicodeCodePoint(UInt32(b & 0b00111111) << shift)
+                shift -= 6
                 expectedUTF8Rest -= 1
             }
             else if b & 0b10000000 > 0 {
                 codePoint = 0
                 if b & 0b01000000 > 0 {
                     if b & 0b00100000 == 0 {
-                        codePoint |= UnicodeCodePoint(b << 3)
+                        shift = 6
+                        codePoint |= UnicodeCodePoint(UInt32(b & 0b00011111) << shift)
+                        shift -= 6
                         expectedUTF8Rest = 1
+                        binaryPositionOffset = expectedUTF8Rest
                     }
                     else if b & 0b00010000 == 0 {
-                        codePoint |= UnicodeCodePoint(b << 4)
+                        shift = 12
+                        codePoint |= UnicodeCodePoint(UInt32(b & 0b00001111) << shift)
+                        shift -= 6
                         expectedUTF8Rest = 2
+                        binaryPositionOffset = expectedUTF8Rest
                     }
                     else if b & 0b00001000 == 0 {
-                        codePoint |= UnicodeCodePoint(b << 5)
+                        shift = 18
+                        codePoint |= UnicodeCodePoint(UInt32(b & 0b00000111) << shift)
+                        shift -= 6
                         expectedUTF8Rest = 3
+                        binaryPositionOffset = expectedUTF8Rest
                     }
                     else {
                         try error("wrong UTF-8 encoding: uncorrect leading byte")
@@ -151,6 +164,7 @@ public class JParser: Parser {
             }
             else {
                 codePoint = UnicodeCodePoint(b)
+                binaryPositionOffset = 0
             }
             
             if expectedUTF8Rest > 0 {
@@ -191,14 +205,14 @@ public class JParser: Parser {
                     bracketLevel += 1
                 case U_QUOTATION_MARK:
                     states.push(.TEXT)
-                    valueStart = binaryPosition + 1
+                    valueStart = binaryPosition + 1 - binaryPositionOffset
                 case U_RIGHT_SQUARE_BRACKET:
                     _ = states.pop()
                     bracketLevel -= 1
                     switch states.pop() {
                     case .OBJECT_AWAITING_VALUE:
                         if let theElementName = elementNames.pop() {
-                            let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                            let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.elementEnd(
                                     name: theElementName,
@@ -227,14 +241,14 @@ public class JParser: Parser {
                     }
                     if !skip {
                         states.push(.NON_TEXT_VALUE)
-                        valueStart = binaryPosition
+                        valueStart = binaryPosition - binaryPositionOffset
                     }
                 }
             case .OBJECT_AWAITING_NAME:
                 switch codePoint {
                 case U_QUOTATION_MARK:
                     states.push(.TEXT)
-                    valueStart = binaryPosition + 1
+                    valueStart = binaryPosition + 1 - binaryPositionOffset
                 case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
                     break
                 default:
@@ -253,7 +267,7 @@ public class JParser: Parser {
             case .OBJECT_AWAITING_VALUE:
                 switch codePoint {
                 case U_QUOTATION_MARK:
-                    valueStart = binaryPosition + 1
+                    valueStart = binaryPosition + 1 - binaryPositionOffset
                     states.push(.TEXT)
                 case U_LEFT_CURLY_BRACKET:
                     states.push(.OBJECT_AWAITING_NAME)
@@ -265,7 +279,7 @@ public class JParser: Parser {
                     break
                 default:
                     states.push(.NON_TEXT_VALUE)
-                    valueStart = binaryPosition
+                    valueStart = binaryPosition - binaryPositionOffset
                 }
             case .NON_TEXT_VALUE:
                 switch codePoint {
@@ -273,7 +287,7 @@ public class JParser: Parser {
                     _ = states.pop()
                     switch states.pop() {
                     case .ARRAY_AWAITING_THING:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementStart(
                                 name: arrayItemName,
@@ -297,7 +311,7 @@ public class JParser: Parser {
                         states.push(.ARRAY_AWAITING_THING)
                     case .OBJECT_AWAITING_VALUE:
                         let value = try getValue()
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         if value != "null" {
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.text(
@@ -326,7 +340,7 @@ public class JParser: Parser {
                     _ = states.pop()
                     switch states.pop() {
                     case .ARRAY_AWAITING_THING:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementStart(
                                 name: arrayItemName,
@@ -367,7 +381,7 @@ public class JParser: Parser {
                     switch states.pop() {
                     case .OBJECT_AWAITING_VALUE:
                         let value = try getValue()
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         if value != "null" {
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.text(
@@ -396,7 +410,7 @@ public class JParser: Parser {
                     switch states.pop() {
                     case .OBJECT_AWAITING_VALUE:
                         let value = try getValue()
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         if value != "null" {
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.text(
@@ -419,7 +433,7 @@ public class JParser: Parser {
                         }
                         states.push(.OBJECT_AWAITING_COMMA_OR_END)
                     case .ARRAY_AWAITING_THING:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementStart(
                                 name: arrayItemName,
@@ -460,7 +474,7 @@ public class JParser: Parser {
                     _ = states.pop()
                     switch states.pop() {
                     case .ARRAY_AWAITING_THING:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementStart(
                                 name: arrayItemName,
@@ -483,7 +497,7 @@ public class JParser: Parser {
                         }
                         states.push(.ARRAY_AWAITING_COMMA_OR_END)
                     case .OBJECT_AWAITING_NAME:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementStart(
                                 name: text,
@@ -494,7 +508,7 @@ public class JParser: Parser {
                         elementNames.push(text)
                         states.push(.OBJECT_AWAITING_COLON)
                     case .OBJECT_AWAITING_VALUE:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.text(
                                 text: text,
@@ -531,7 +545,7 @@ public class JParser: Parser {
                     _ = states.pop()
                     if states.peek() == .OBJECT_AWAITING_VALUE {
                         if let theElementName = elementNames.pop() {
-                            let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                            let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.elementEnd(
                                     name: theElementName,
@@ -559,7 +573,7 @@ public class JParser: Parser {
                     _ = states.pop()
                     if states.peek() == .OBJECT_AWAITING_VALUE {
                         if let theElementName = elementNames.pop() {
-                            let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+                            let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.elementEnd(
                                     name: theElementName,
@@ -589,7 +603,7 @@ public class JParser: Parser {
             try error("document not finished")
         }
         
-        let sourceRangeEnd = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition, binaryUntil: binaryPosition)
+        let sourceRangeEnd = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
         eventHandlers.forEach { eventHandler in
             eventHandler.elementEnd(
                 name: rootName,

@@ -212,6 +212,9 @@ public class XParser: Parser {
         var lastCodePoint: UnicodeCodePoint = 0
         var lastLastCodePoint: UnicodeCodePoint = 0
         
+        var shift = 0
+        var binaryPositionOffset = 0
+        
         binaryLoop: for b in data {
             binaryPosition += 1
             
@@ -220,23 +223,33 @@ public class XParser: Parser {
                 if b & 0b10000000 == 0 || b & 0b01000000 > 0 {
                     try error("wrong UTF-8 encoding: expecting follow-up byte 10xxxxxx")
                 }
-                codePoint |= UnicodeCodePoint(b << 2)
+                codePoint |= UnicodeCodePoint(UInt32(b & 0b00111111) << shift)
+                shift -= 6
                 expectedUTF8Rest -= 1
             }
             else if b & 0b10000000 > 0 {
                 codePoint = 0
                 if b & 0b01000000 > 0 {
                     if b & 0b00100000 == 0 {
-                        codePoint |= UnicodeCodePoint(b << 3)
+                        shift = 6
+                        codePoint |= UnicodeCodePoint(UInt32(b & 0b00011111) << shift)
+                        shift -= 6
                         expectedUTF8Rest = 1
+                        binaryPositionOffset = expectedUTF8Rest
                     }
                     else if b & 0b00010000 == 0 {
-                        codePoint |= UnicodeCodePoint(b << 4)
+                        shift = 12
+                        codePoint |= UnicodeCodePoint(UInt32(b & 0b00001111) << shift)
+                        shift -= 6
                         expectedUTF8Rest = 2
+                        binaryPositionOffset = expectedUTF8Rest
                     }
                     else if b & 0b00001000 == 0 {
-                        codePoint |= UnicodeCodePoint(b << 5)
+                        shift = 18
+                        codePoint |= UnicodeCodePoint(UInt32(b & 0b00000111) << shift)
+                        shift -= 6
                         expectedUTF8Rest = 3
+                        binaryPositionOffset = expectedUTF8Rest
                     }
                     else {
                         try error("wrong UTF-8 encoding: uncorrect leading byte")
@@ -248,6 +261,7 @@ public class XParser: Parser {
             }
             else {
                 codePoint = UnicodeCodePoint(b)
+                binaryPositionOffset = 0
             }
             
             if expectedUTF8Rest > 0 {
@@ -269,7 +283,7 @@ public class XParser: Parser {
                 try error("x\(String(format: "%X", codePoint)) is not a Unicode codepoint")
             }
             
-            //print("@ \(line):\(column) (\(binaryPosition)): \(outerState)/\(state): \(characterCitation(codePoint)) (WHITESPACE: \(isWhitespace))")
+            print("@ \(line):\(column) (\(binaryPosition)): \(outerState)/\(state): \(characterCitation(codePoint)) (WHITESPACE: \(isWhitespace))")
             
             switch state {
             /* 1 */
@@ -476,7 +490,7 @@ public class XParser: Parser {
                             if !isNameStartCharacter(codePoint) {
                                 try error("illegal \(characterCitation(codePoint)) at start of token")
                             }
-                            tokenStart = binaryPosition
+                            tokenStart = binaryPosition - binaryPositionOffset
                         }
                     }
             /* 3 */
@@ -525,7 +539,7 @@ public class XParser: Parser {
                             if !isNameStartCharacter(codePoint) {
                                 try error("illegal \(characterCitation(codePoint)) at start of element name")
                             }
-                            tokenStart = binaryPosition
+                            tokenStart = binaryPosition - binaryPositionOffset
                         }
                     }
                     else {
@@ -543,8 +557,8 @@ public class XParser: Parser {
                 case U_QUESTION_MARK:
                     state = .PROCESSING_INSTRUCTION
                 default:
-                    if isNameCharacter(codePoint) {
-                        tokenStart = binaryPosition
+                    if isNameStartCharacter(codePoint) {
+                        tokenStart = binaryPosition - binaryPositionOffset
                     }
                     else {
                         try error("illegal \(characterCitation(codePoint)) after \"<\"")
@@ -756,7 +770,7 @@ public class XParser: Parser {
                             if !isNameStartCharacter(codePoint) {
                                 try error("illegal character at start of processing instruction")
                             }
-                            tokenStart = binaryPosition
+                            tokenStart = binaryPosition - binaryPositionOffset
                         }
                         else if !isNameCharacter(codePoint) {
                             try error("illegal \(characterCitation(codePoint)) in processing instruction target")
@@ -1098,7 +1112,7 @@ public class XParser: Parser {
                         if !(isNameStartCharacter(codePoint) || (state == .ENTITY_DECLARATION && b == U_PERCENT_SIGN && items.count == 0)) {
                             try error("illegal \(characterCitation(codePoint)) in declaration")
                         }
-                        tokenStart = binaryPosition
+                        tokenStart = binaryPosition - binaryPositionOffset
                     }
                 }
             /* 11 */
@@ -1419,7 +1433,7 @@ public class XParser: Parser {
                     }
                 default:
                     if token == nil && tokenStart < 0 {
-                        tokenStart = binaryPosition
+                        tokenStart = binaryPosition - binaryPositionOffset
                     }
                 }
             /* 14 */
