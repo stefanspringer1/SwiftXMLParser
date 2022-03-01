@@ -816,7 +816,7 @@ public class XParser: Parser {
                                        let publicID = (items[2] as? quotedParseResult)?.value
                                     {
                                         broadcast { (eventHandler,sourceRange) in
-                                            eventHandler.documentTypeDeclaration(
+                                            eventHandler.documentTypeDeclarationStart(
                                                 type: name,
                                                 publicID: publicID,
                                                 systemID: nil,
@@ -831,7 +831,7 @@ public class XParser: Parser {
                                         if let publicID = (items[2] as? quotedParseResult)?.value
                                            {
                                             broadcast { (eventHandler,sourceRange) in
-                                                eventHandler.documentTypeDeclaration(
+                                                eventHandler.documentTypeDeclarationStart(
                                                     type: name,
                                                     publicID: publicID,
                                                     systemID:  nil,
@@ -846,7 +846,7 @@ public class XParser: Parser {
                                            let systemID = (items[3] as? quotedParseResult)?.value
                                         {
                                             broadcast { (eventHandler,sourceRange) in
-                                                eventHandler.documentTypeDeclaration(
+                                                eventHandler.documentTypeDeclarationStart(
                                                     type: name,
                                                     publicID: publicID,
                                                     systemID: systemID,
@@ -860,7 +860,7 @@ public class XParser: Parser {
                             }
                             else {
                                 broadcast { (eventHandler,sourceRange) in
-                                    eventHandler.documentTypeDeclaration(
+                                    eventHandler.documentTypeDeclarationStart(
                                         type: name,
                                         publicID: nil,
                                         systemID: nil,
@@ -876,6 +876,13 @@ public class XParser: Parser {
                         }
                         else {
                             try error("missing type in document type declaration")
+                        }
+                        if codePoint == U_GREATER_THAN_SIGN {
+                            broadcast { (eventHandler,sourceRange) in
+                                eventHandler.documentTypeDeclarationEnd(
+                                    sourceRange: sourceRange
+                                )
+                            }
                         }
                         state = b == U_LEFT_SQUARE_BRACKET ? .INTERNAL_SUBSET : .TEXT
                     case .ENTITY_DECLARATION:
@@ -1295,6 +1302,8 @@ public class XParser: Parser {
                 switch codePoint {
                 case U_RIGHT_SQUARE_BRACKET:
                     state = .DOCUMENT_TYPE_DECLARATION_TAIL
+                    parsedBefore = binaryPosition + 1
+                    setMainStart()
                 case U_LESS_THAN_SIGN:
                     state = .JUST_STARTED_WITH_LESS_THAN_SIGN
                     outerState = .INTERNAL_SUBSET
@@ -1442,6 +1451,11 @@ public class XParser: Parser {
             case .DOCUMENT_TYPE_DECLARATION_TAIL:
                 switch codePoint {
                 case U_GREATER_THAN_SIGN:
+                    broadcast { (eventHandler,sourceRange) in
+                        eventHandler.documentTypeDeclarationEnd(
+                            sourceRange: sourceRange
+                        )
+                    }
                     state = .TEXT
                     isWhitespace = true
                     parsedBefore = binaryPosition + 1
