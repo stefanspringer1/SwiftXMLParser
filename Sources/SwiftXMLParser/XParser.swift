@@ -283,7 +283,7 @@ public class XParser: Parser {
                 try error("x\(String(format: "%X", codePoint)) is not a Unicode codepoint")
             }
             
-            print("@ \(line):\(column) (\(binaryPosition)): \(outerState)/\(state): \(characterCitation(codePoint)) (WHITESPACE: \(isWhitespace))")
+            //print("@ \(line):\(column) (\(binaryPosition)): \(outerState)/\(state): \(characterCitation(codePoint)) (WHITESPACE: \(isWhitespace))")
             
             switch state {
             /* 1 */
