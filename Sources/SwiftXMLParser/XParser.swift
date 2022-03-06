@@ -605,7 +605,7 @@ public class XParser: Parser {
                                         try error("missing attribute name")
                                     }
                                 }
-                                resolution = theInternalEntityResolver.resolve(entityWithName: entityText, forAttributeName: token, atElementWithName: name)
+                                resolution = theInternalEntityResolver.resolve(entityWithName: entityText, forAttributeWithName: token, atElementWithName: name)
                             }
                         }
                     }
