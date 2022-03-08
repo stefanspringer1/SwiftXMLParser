@@ -57,11 +57,11 @@ public class XParser: Parser {
     
     let internalEntityResolver: InternalEntityResolver?
     
-    let textAllowed: ((String) -> Bool)?
+    let textAllowedInElementWithName: ((String) -> Bool)?
     
-    public init(internalEntityResolver: InternalEntityResolver? = nil, textAllowed: ((String) -> Bool)? = nil) {
+    public init(internalEntityResolver: InternalEntityResolver? = nil, textAllowedInElementWithName: ((String) -> Bool)? = nil) {
         self.internalEntityResolver = internalEntityResolver
-        self.textAllowed = textAllowed
+        self.textAllowedInElementWithName = textAllowedInElementWithName
     }
     
     public func parse(
@@ -338,7 +338,7 @@ public class XParser: Parser {
                         }
                         if !texts.isEmpty {
                             if elementLevel > 0 {
-                                if textAllowed?(ancestors.peek()!) == false {
+                                if textAllowedInElementWithName?(ancestors.peek()!) == false {
                                     if !isWhitespace {
                                         try error("non-whitespace #1 text in \(ancestors.elements.joined(separator: " / ")): \"\(formatNonWhitespace(texts.joined()))\"")
                                     }
@@ -622,7 +622,7 @@ public class XParser: Parser {
                         if !texts.isEmpty {
                             let text = texts.joined()
                             if elementLevel > 0 {
-                                if textAllowed?(ancestors.peek()!) == false {
+                                if textAllowedInElementWithName?(ancestors.peek()!) == false {
                                     if !isWhitespace {
                                         try error("non-whitespace #2 text in \(ancestors.elements.joined(separator: " / ")): \"\(formatNonWhitespace(text))\"")
                                     }
