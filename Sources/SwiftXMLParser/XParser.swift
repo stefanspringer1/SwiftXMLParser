@@ -779,13 +779,13 @@ public class XParser: Parser {
                         try error("procesing instruction without target")
                     }
                     parsedBefore = binaryPosition + 1
-                    setMainStart()
+                    setMainStart(delayed: true)
                     state = outerState
                     outerState = .TEXT
                 }
-                else if codePoint == U_QUESTION_MARK && lastCodePoint == U_LESS_THAN_SIGN {
+                /*else if codePoint == U_QUESTION_MARK && lastCodePoint == U_LESS_THAN_SIGN {
                     try error("beginning of another processing instruction inside a processing instruction", negativeColumnOffset: 1)
-                }
+                }*/ // is allowed see https://www.w3.org/TR/xml/#sec-pi
                 else {
                     if name == nil {
                         if tokenStart < 0 {
