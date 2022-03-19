@@ -92,13 +92,17 @@ public class JParser: Parser {
         
         var bracketLevel = 0
         
-        let sourceRangeStart = SourceRange(startLine: 0, startColumn: 0, endLine: 0, endColumn: 0, binaryStart: 0, binaryUntil: 0)
-        eventHandlers.forEach { eventHandler in
-            eventHandler.elementStart(
-                name: rootName,
-                attributes: nil,
-                sourceRange: sourceRangeStart
-            )
+        do {
+            let startTextRange = XTextRange(startLine: 0, startColumn: 0, endLine: 0, endColumn: 0)
+            let startDataRange = XDataRange(binaryStart: 0, binaryUntil: 0)
+            eventHandlers.forEach { eventHandler in
+                eventHandler.elementStart(
+                    name: rootName,
+                    attributes: nil,
+                    textRange: startTextRange,
+                    dataRange: startDataRange
+                )
+            }
         }
         
         func getValue() throws -> String {
@@ -212,11 +216,13 @@ public class JParser: Parser {
                     switch states.pop() {
                     case .OBJECT_AWAITING_VALUE:
                         if let theElementName = elementNames.pop() {
-                            let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                            let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                            let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.elementEnd(
                                     name: theElementName,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
@@ -287,37 +293,43 @@ public class JParser: Parser {
                     _ = states.pop()
                     switch states.pop() {
                     case .ARRAY_AWAITING_THING:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                        let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                        let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementStart(
                                 name: arrayItemName,
                                 attributes: nil,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         try eventHandlers.forEach { eventHandler in
                             eventHandler.text(
                                 text: try getValue(),
                                 whitespace: .UNKNOWN,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementEnd(
                                 name: arrayItemName,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         states.push(.ARRAY_AWAITING_THING)
                     case .OBJECT_AWAITING_VALUE:
                         let value = try getValue()
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                        let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                        let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         if value != "null" {
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.text(
                                     text: value,
                                     whitespace: .UNKNOWN,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
@@ -325,7 +337,8 @@ public class JParser: Parser {
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.elementEnd(
                                     name: theElementName,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
@@ -340,12 +353,14 @@ public class JParser: Parser {
                     _ = states.pop()
                     switch states.pop() {
                     case .ARRAY_AWAITING_THING:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                        let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                        let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementStart(
                                 name: arrayItemName,
                                 attributes: nil,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         let value = try getValue()
@@ -354,14 +369,16 @@ public class JParser: Parser {
                                 eventHandler in eventHandler.text(
                                     text: value,
                                     whitespace: .UNKNOWN,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementEnd(
                                 name: arrayItemName,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         bracketLevel -= 1
@@ -381,13 +398,15 @@ public class JParser: Parser {
                     switch states.pop() {
                     case .OBJECT_AWAITING_VALUE:
                         let value = try getValue()
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                        let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                        let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         if value != "null" {
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.text(
                                     text: value,
                                     whitespace: .UNKNOWN,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
@@ -395,7 +414,8 @@ public class JParser: Parser {
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.elementEnd(
                                     name: theElementName,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
@@ -410,13 +430,15 @@ public class JParser: Parser {
                     switch states.pop() {
                     case .OBJECT_AWAITING_VALUE:
                         let value = try getValue()
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                        let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                        let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         if value != "null" {
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.text(
                                     text: value,
                                     whitespace: .UNKNOWN,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
@@ -424,7 +446,8 @@ public class JParser: Parser {
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.elementEnd(
                                     name: theElementName,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
@@ -433,12 +456,14 @@ public class JParser: Parser {
                         }
                         states.push(.OBJECT_AWAITING_COMMA_OR_END)
                     case .ARRAY_AWAITING_THING:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                        let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                        let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementStart(
                                 name: arrayItemName,
                                 attributes: nil,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         let value = try getValue()
@@ -447,14 +472,16 @@ public class JParser: Parser {
                                 eventHandler.text(
                                     text: value,
                                     whitespace: .UNKNOWN,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementEnd(
                                 name: arrayItemName,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         states.push(.ARRAY_AWAITING_COMMA_OR_END)
@@ -474,53 +501,62 @@ public class JParser: Parser {
                     _ = states.pop()
                     switch states.pop() {
                     case .ARRAY_AWAITING_THING:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                        let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                        let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementStart(
                                 name: arrayItemName,
                                 attributes: nil,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         eventHandlers.forEach { eventHandler in
                             eventHandler.text(
                                 text: text,
                                 whitespace: .UNKNOWN,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementEnd(
                                 name: arrayItemName,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         states.push(.ARRAY_AWAITING_COMMA_OR_END)
                     case .OBJECT_AWAITING_NAME:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                        let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                        let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.elementStart(
                                 name: text,
                                 attributes: nil,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         elementNames.push(text)
                         states.push(.OBJECT_AWAITING_COLON)
                     case .OBJECT_AWAITING_VALUE:
-                        let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                        let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                        let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                         eventHandlers.forEach { eventHandler in
                             eventHandler.text(
                                 text: text,
                                 whitespace: .UNKNOWN,
-                                sourceRange: sourceRange
+                                textRange: textRange,
+                                dataRange: dataRange
                             )
                         }
                         if let theElementName = elementNames.pop() {
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.elementEnd(
                                     name: theElementName,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
@@ -545,11 +581,13 @@ public class JParser: Parser {
                     _ = states.pop()
                     if states.peek() == .OBJECT_AWAITING_VALUE {
                         if let theElementName = elementNames.pop() {
-                            let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                            let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                            let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.elementEnd(
                                     name: theElementName,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
@@ -573,11 +611,13 @@ public class JParser: Parser {
                     _ = states.pop()
                     if states.peek() == .OBJECT_AWAITING_VALUE {
                         if let theElementName = elementNames.pop() {
-                            let sourceRange = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+                            let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+                            let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
                             eventHandlers.forEach { eventHandler in
                                 eventHandler.elementEnd(
                                     name: theElementName,
-                                    sourceRange: sourceRange
+                                    textRange: textRange,
+                                    dataRange: dataRange
                                 )
                             }
                         }
@@ -603,11 +643,13 @@ public class JParser: Parser {
             try error("document not finished")
         }
         
-        let sourceRangeEnd = SourceRange(startLine: line, startColumn: column, endLine: line, endColumn: column, binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
+        let textRange = XTextRange(startLine: line, startColumn: column, endLine: line, endColumn: column)
+        let dataRange = XDataRange(binaryStart: binaryPosition - binaryPositionOffset, binaryUntil: binaryPosition - binaryPositionOffset)
         eventHandlers.forEach { eventHandler in
             eventHandler.elementEnd(
                 name: rootName,
-                sourceRange: sourceRangeEnd
+                textRange: textRange,
+                dataRange: dataRange
             )
         }
     }

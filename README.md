@@ -28,3 +28,76 @@ Besides entity handling, the client uses the parser by an instance of type "XMLE
 ## Documentation
 
 More documentation will be added (if the active repository is not moved yet, see abobe), either in this README file or as code comments.
+
+## Facilities for testing
+
+Fopr testing of the parser, one might want to use one of the following functions. They print the parser event together with extractions according to the binary and text positions that are reported:
+
+```Swift
+func xParseTest(forData: Data, writer: XTestWriter, fullDebugOutput: Bool)
+```
+
+```Swift
+func xParseTest(forPath: String, writer: XTestWriter, fullDebugOutput: Bool) throws
+```
+
+```Swift
+func xParseTest(forText: String, writer: XTestWriter, fullDebugOutput: Bool)
+```
+
+```Swift
+func xParseTest(forURL: URL, writer: XTestWriter, fullDebugOutput: Bool) throws
+```
+
+Example:
+
+```Swift
+let source = """
+<a>Hi</a>
+"""
+
+xParseTest(forText: source, fullDebugOutput: false)
+```
+
+Output:
+
+```text
+document started
+start of element: name "a", no attributes; 1:1 - 1:3 (0..<3 in data)
+  binary excerpt: {<a>}
+  line excerpt:   {<a>}
+text: "Hi", whitespace indicator NOT_WHITESPACE; 1:4 - 1:5 (3..<5 in data)
+  binary excerpt: {Hi}
+  line excerpt:   {Hi}
+end of element: name "a"; 1:6 - 1:9 (5..<9 in data)
+  binary excerpt: {</a>}
+  line excerpt:   {</a>}
+document ended
+```
+
+If you set `fullDebugOutput` to true, the characters are printed together with the internal states of the parser:
+
+```text
+document started
+@ 1:1 (#0 in data): "<" in TEXT in TEXT (whitespace was: true)
+@ 1:2 (#1 in data): "a" in JUST_STARTED_WITH_LESS_THAN_SIGN in TEXT (whitespace was: true)
+@ 1:3 (#2 in data): ">" in START_OR_EMPTY_TAG in TEXT (whitespace was: true)
+start of element: name "a", no attributes; 1:1 - 1:3 (0..<3 in data)
+  binary excerpt: {<a>}
+  line excerpt:   {<a>}
+@ 1:4 (#3 in data): "H" in TEXT in TEXT (whitespace was: true)
+@ 1:5 (#4 in data): "i" in TEXT in TEXT (whitespace was: false)
+@ 1:6 (#5 in data): "<" in TEXT in TEXT (whitespace was: false)
+text: "Hi", whitespace indicator NOT_WHITESPACE; 1:4 - 1:5 (3..<5 in data)
+  binary excerpt: {Hi}
+  line excerpt:   {Hi}
+@ 1:7 (#6 in data): "/" in JUST_STARTED_WITH_LESS_THAN_SIGN in TEXT (whitespace was: true)
+@ 1:8 (#7 in data): "a" in END_TAG in TEXT (whitespace was: true)
+@ 1:9 (#8 in data): ">" in END_TAG in TEXT (whitespace was: true)
+end of element: name "a"; 1:6 - 1:9 (5..<9 in data)
+  binary excerpt: {</a>}
+  line excerpt:   {</a>}
+document ended
+```
+
+If you want to adjust this testing e.g. to write the debug output to somewhere else, then look at the implementation of `xParseTest(forData:writer:fullDebugOutput:)`.
