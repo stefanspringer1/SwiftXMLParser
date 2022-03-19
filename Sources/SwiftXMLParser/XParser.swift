@@ -75,8 +75,8 @@ public class XParser: Parser {
         var line = 1; var lastLine = 1
         var column = 0; var lastColumn = 1
         
-        func error(_ message: String, offset: Int = 0) throws {
-            throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(max(1,line-offset)):\(column):E: \(message)")
+        func error(_ message: String, negativeColumnOffset: Int = 0) throws {
+            throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(line):\(column-negativeColumnOffset):E: \(message)")
         }
         
         func characterCitation(_ codePoint: UnicodeCodePoint) -> String {
@@ -137,6 +137,7 @@ public class XParser: Parser {
         
         // for parsing of start tag:
         var tokenStart = -1
+        var tokenEnd = -1
         var token: String? = nil
         var name: String? = nil
         var equalSignAfterToken = false
@@ -300,7 +301,7 @@ public class XParser: Parser {
                     if elementLevel == 0 && outerState == .TEXT {
                         try error("non-whitespace \(characterCitation(codePoint)) outside elements")
                     }
-                    else if b == quoteSign {
+                    else if codePoint == quoteSign {
                         if binaryPosition > parsedBefore {
                             texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                         }
@@ -465,13 +466,13 @@ public class XParser: Parser {
                             tokenStart = -1
                         }
                         if state == .START_OR_EMPTY_TAG {
-                            if b == U_SOLIDUS {
+                            if codePoint == U_SOLIDUS {
                                 state = .EMPTY_TAG_FINISHING
                             }
                         }
-                        else if b == U_QUESTION_MARK {
+                        else if codePoint == U_QUESTION_MARK {
                             state = .XML_DECLARATION_FINISHING
-                        } else if b == U_SOLIDUS {
+                        } else if codePoint == U_SOLIDUS {
                             try error("illegal \(characterCitation(codePoint))")
                         }
                     case U_EQUALS_SIGN:
@@ -576,7 +577,7 @@ public class XParser: Parser {
                 }
             /* 5 */
             case .ENTITY:
-                if b == U_SEMICOLON {
+                if codePoint == U_SEMICOLON {
                     let entityText = String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self)
                     if elementLevel == 0 && outerState == .TEXT {
                         try error("entity \"\(entityText)\" outside elements")
@@ -690,7 +691,7 @@ public class XParser: Parser {
                 }
             /* 6 */
             case .EMPTY_TAG_FINISHING:
-                if b == U_GREATER_THAN_SIGN {
+                if codePoint == U_GREATER_THAN_SIGN {
                     if name == nil {
                         try error("missing element name")
                     }
@@ -741,26 +742,27 @@ public class XParser: Parser {
                 }
             /* 7 */
             case .PROCESSING_INSTRUCTION:
-                switch codePoint {
-                case U_QUESTION_MARK, U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION:
-                    if tokenStart > -1 {
-                        name =  String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
-                        tokenStart = -1
-                        parsedBefore = binaryPosition + 1
-                        if name == "xml" {
+                if tokenStart > -1 && !isNameCharacter(codePoint) {
+                    name =  String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
+                    tokenStart = -1
+                    tokenEnd = binaryPosition
+                    parsedBefore = binaryPosition + 1
+                    if name == "xml" {
+                        if codePoint == U_SPACE || codePoint == U_LINE_FEED || codePoint == U_CARRIAGE_RETURN || codePoint == U_CHARACTER_TABULATION {
                             state = .XML_DECLARATION
                         }
                     }
-                    else if name == nil {
-                        try error("illegal space at start of processing instruction")
+                }
+                else if codePoint == U_GREATER_THAN_SIGN && lastCodePoint == U_QUESTION_MARK {
+                    if tokenStart > -1 {
+                        name =  String(decoding: data.subdata(in: tokenStart..<binaryPosition-1), as: UTF8.self)
+                        tokenStart = -1
                     }
-                case U_GREATER_THAN_SIGN:
-                    if lastCodePoint == U_QUESTION_MARK {
-                        if tokenStart >= 0 {
-                            name =  String(decoding: data.subdata(in: tokenStart..<binaryPosition-1), as: UTF8.self)
-                            tokenStart = -1
+                    if let target = name {
+                        if name == "xml" {
+                            try error("found XML declaration without version")
                         }
-                        if let target = name {
+                        else {
                             let data = parsedBefore<binaryPosition-1 ? String(decoding: data.subdata(in: parsedBefore..<binaryPosition-1), as: UTF8.self): nil
                             broadcast { (eventHandler,textRange,dataRange) in
                                 eventHandler.processingInstruction(
@@ -770,17 +772,21 @@ public class XParser: Parser {
                                     dataRange: dataRange
                                 )
                             }
-                            name = nil
                         }
-                        else {
-                            try error("procesing instruction without target")
-                        }
-                        parsedBefore = binaryPosition + 1
-                        setMainStart()
-                        state = outerState
-                        outerState = .TEXT
+                        name = nil
                     }
-                default:
+                    else {
+                        try error("procesing instruction without target")
+                    }
+                    parsedBefore = binaryPosition + 1
+                    setMainStart()
+                    state = outerState
+                    outerState = .TEXT
+                }
+                else if codePoint == U_QUESTION_MARK && lastCodePoint == U_LESS_THAN_SIGN {
+                    try error("beginning of another processing instruction inside a processing instruction", negativeColumnOffset: 1)
+                }
+                else {
                     if name == nil {
                         if tokenStart < 0 {
                             if !isNameStartCharacter(codePoint) {
@@ -788,8 +794,10 @@ public class XParser: Parser {
                             }
                             tokenStart = binaryPosition - binaryPositionOffset
                         }
-                        else if !isNameCharacter(codePoint) {
-                            try error("illegal \(characterCitation(codePoint)) in processing instruction target")
+                    }
+                    else if binaryPosition == tokenEnd + 1 {
+                        if !(lastCodePoint == U_SPACE || lastCodePoint == U_LINE_FEED || lastCodePoint == U_CARRIAGE_RETURN || lastCodePoint == U_CHARACTER_TABULATION) {
+                            try error("missing space after target in processing instruction")
                         }
                     }
                 }
@@ -841,7 +849,7 @@ public class XParser: Parser {
             case .DOCUMENT_TYPE_DECLARATION_HEAD, .ENTITY_DECLARATION, .NOTATION_DECLARATION:
                 switch codePoint {
                 case U_LEFT_SQUARE_BRACKET, U_GREATER_THAN_SIGN:
-                    if b == U_LEFT_SQUARE_BRACKET && !(state == .DOCUMENT_TYPE_DECLARATION_HEAD) {
+                    if codePoint == U_LEFT_SQUARE_BRACKET && !(state == .DOCUMENT_TYPE_DECLARATION_HEAD) {
                         try error("illegal character \(characterCitation(codePoint))")
                         break
                     }
@@ -1141,7 +1149,7 @@ public class XParser: Parser {
                         }
                     }
                     else {
-                        if !(isNameStartCharacter(codePoint) || (state == .ENTITY_DECLARATION && b == U_PERCENT_SIGN && items.count == 0)) {
+                        if !(isNameStartCharacter(codePoint) || (state == .ENTITY_DECLARATION && codePoint == U_PERCENT_SIGN && items.count == 0)) {
                             try error("illegal \(characterCitation(codePoint)) in declaration")
                         }
                         tokenStart = binaryPosition - binaryPositionOffset
@@ -1151,133 +1159,133 @@ public class XParser: Parser {
             case .UNKNOWN_DECLARATION_LIKE:
                 switch unkownDeclarationOffset {
                 case 0:
-                    if possibleState & _ENTITY_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_E {
+                    if possibleState & _ENTITY_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_E {
                         possibleState ^= _ENTITY_DECLARATION
                     }
-                    if possibleState & _COMMENT > 0 && b != U_HYPHEN_MINUS {
+                    if possibleState & _COMMENT > 0 && codePoint != U_HYPHEN_MINUS {
                         possibleState ^= _COMMENT
                     }
-                    if possibleState & _CDATA_SECTION > 0 && b != U_LEFT_SQUARE_BRACKET {
+                    if possibleState & _CDATA_SECTION > 0 && codePoint != U_LEFT_SQUARE_BRACKET {
                         possibleState ^= _CDATA_SECTION
                     }
-                    if possibleState & _NOTATION_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_N {
+                    if possibleState & _NOTATION_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_N {
                         possibleState ^= _NOTATION_DECLARATION
                     }
-                    if possibleState & _ELEMENT_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_E {
+                    if possibleState & _ELEMENT_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_E {
                         possibleState ^= _ELEMENT_DECLARATION
                     }
-                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_A {
+                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_A {
                         possibleState ^= _ATTRIBUTE_LIST_DECLARATION
                     }
-                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && b != U_LATIN_CAPITAL_LETTER_D {
+                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && codePoint != U_LATIN_CAPITAL_LETTER_D {
                         possibleState ^= _DOCUMENT_TYPE_DECLARATION_HEAD
                     }
                 case 1:
-                    if possibleState & _ENTITY_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_N {
+                    if possibleState & _ENTITY_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_N {
                         possibleState ^= _ENTITY_DECLARATION
                     }
                     if possibleState & _COMMENT > 0 {
-                        if b == U_HYPHEN_MINUS {
+                        if codePoint == U_HYPHEN_MINUS {
                             state = .COMMENT
                         }
                         else {
                             possibleState ^= _COMMENT
                         }
                     }
-                    if possibleState & _CDATA_SECTION > 0 && b != U_LATIN_CAPITAL_LETTER_C {
+                    if possibleState & _CDATA_SECTION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_C {
                         possibleState ^= _CDATA_SECTION
                     }
-                    if possibleState & _NOTATION_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_O {
+                    if possibleState & _NOTATION_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_O {
                         possibleState ^= _NOTATION_DECLARATION
                     }
-                    if possibleState & _ELEMENT_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_L {
+                    if possibleState & _ELEMENT_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_L {
                         possibleState ^= _ELEMENT_DECLARATION
                     }
-                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_T {
+                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_T {
                         possibleState ^= _ATTRIBUTE_LIST_DECLARATION
                     }
-                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && b != U_LATIN_CAPITAL_LETTER_O {
+                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && codePoint != U_LATIN_CAPITAL_LETTER_O {
                         possibleState ^= _DOCUMENT_TYPE_DECLARATION_HEAD
                     }
                 case 2:
-                    if possibleState & _CDATA_SECTION > 0 && b != U_LATIN_CAPITAL_LETTER_D {
+                    if possibleState & _CDATA_SECTION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_D {
                         possibleState ^= _CDATA_SECTION
                     }
-                    if possibleState & _ENTITY_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_T {
+                    if possibleState & _ENTITY_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_T {
                         possibleState ^= _ENTITY_DECLARATION
                     }
-                    if possibleState & _NOTATION_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_T {
+                    if possibleState & _NOTATION_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_T {
                         possibleState ^= _NOTATION_DECLARATION
                     }
-                    if possibleState & _ELEMENT_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_E {
+                    if possibleState & _ELEMENT_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_E {
                         possibleState ^= _ELEMENT_DECLARATION
                     }
-                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_T {
+                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_T {
                         possibleState ^= _ATTRIBUTE_LIST_DECLARATION
                     }
-                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && b != U_LATIN_CAPITAL_LETTER_C {
+                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && codePoint != U_LATIN_CAPITAL_LETTER_C {
                         possibleState ^= _DOCUMENT_TYPE_DECLARATION_HEAD
                     }
                 case 3:
-                    if possibleState & _CDATA_SECTION > 0 && b != U_LATIN_CAPITAL_LETTER_A {
+                    if possibleState & _CDATA_SECTION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_A {
                         possibleState ^= _CDATA_SECTION
                     }
-                    if possibleState & _ENTITY_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_I {
+                    if possibleState & _ENTITY_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_I {
                         possibleState ^= _ENTITY_DECLARATION
                     }
-                    if possibleState & _NOTATION_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_A {
+                    if possibleState & _NOTATION_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_A {
                         possibleState ^= _NOTATION_DECLARATION
                     }
-                    if possibleState & _ELEMENT_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_M {
+                    if possibleState & _ELEMENT_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_M {
                         possibleState ^= _ELEMENT_DECLARATION
                     }
-                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_L {
+                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_L {
                         possibleState ^= _ATTRIBUTE_LIST_DECLARATION
                     }
-                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && b != U_LATIN_CAPITAL_LETTER_T {
+                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && codePoint != U_LATIN_CAPITAL_LETTER_T {
                         possibleState ^= _DOCUMENT_TYPE_DECLARATION_HEAD
                     }
                 case 4:
-                    if possibleState & _CDATA_SECTION > 0 && b != U_LATIN_CAPITAL_LETTER_T {
+                    if possibleState & _CDATA_SECTION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_T {
                         possibleState ^= _CDATA_SECTION
                     }
-                    if possibleState & _ENTITY_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_T {
+                    if possibleState & _ENTITY_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_T {
                         possibleState ^= _ENTITY_DECLARATION
                     }
-                    if possibleState & _NOTATION_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_T {
+                    if possibleState & _NOTATION_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_T {
                         possibleState ^= _NOTATION_DECLARATION
                     }
-                    if possibleState & _ELEMENT_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_E {
+                    if possibleState & _ELEMENT_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_E {
                         possibleState ^= _ELEMENT_DECLARATION
                     }
-                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_I {
+                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_I {
                         possibleState ^= _ATTRIBUTE_LIST_DECLARATION
                     }
-                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && b != U_LATIN_CAPITAL_LETTER_Y {
+                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && codePoint != U_LATIN_CAPITAL_LETTER_Y {
                         possibleState ^= _DOCUMENT_TYPE_DECLARATION_HEAD
                     }
                 case 5:
-                    if possibleState & _CDATA_SECTION > 0 && b != U_LATIN_CAPITAL_LETTER_A {
+                    if possibleState & _CDATA_SECTION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_A {
                         possibleState ^= _CDATA_SECTION
                     }
-                    if possibleState & _ENTITY_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_Y {
+                    if possibleState & _ENTITY_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_Y {
                         possibleState ^= _ENTITY_DECLARATION
                     }
-                    if possibleState & _NOTATION_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_I {
+                    if possibleState & _NOTATION_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_I {
                         possibleState ^= _NOTATION_DECLARATION
                     }
-                    if possibleState & _ELEMENT_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_N {
+                    if possibleState & _ELEMENT_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_N {
                         possibleState ^= _ELEMENT_DECLARATION
                     }
-                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_S {
+                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_S {
                         possibleState ^= _ATTRIBUTE_LIST_DECLARATION
                     }
-                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && b != U_LATIN_CAPITAL_LETTER_P {
+                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && codePoint != U_LATIN_CAPITAL_LETTER_P {
                         possibleState ^= _DOCUMENT_TYPE_DECLARATION_HEAD
                     }
                 case 6:
                     if possibleState & _CDATA_SECTION > 0 {
-                        if b == U_LEFT_SQUARE_BRACKET {
+                        if codePoint == U_LEFT_SQUARE_BRACKET {
                             state = .CDATA_SECTION
                             break
                         }
@@ -1286,7 +1294,7 @@ public class XParser: Parser {
                         }
                     }
                     if possibleState & _ENTITY_DECLARATION > 0 {
-                        if b == U_SPACE || b == U_LINE_FEED || b == U_CARRIAGE_RETURN || b == U_CHARACTER_TABULATION {
+                        if codePoint == U_SPACE || codePoint == U_LINE_FEED || codePoint == U_CARRIAGE_RETURN || codePoint == U_CHARACTER_TABULATION {
                             state = .ENTITY_DECLARATION
                             break
                         }
@@ -1294,24 +1302,24 @@ public class XParser: Parser {
                             possibleState ^= _ENTITY_DECLARATION
                         }
                     }
-                    if possibleState & _NOTATION_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_O {
+                    if possibleState & _NOTATION_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_O {
                         possibleState ^= _NOTATION_DECLARATION
                     }
-                    if possibleState & _ELEMENT_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_T {
+                    if possibleState & _ELEMENT_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_T {
                         possibleState ^= _ELEMENT_DECLARATION
                     }
-                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_T {
+                    if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_T {
                         possibleState ^= _ATTRIBUTE_LIST_DECLARATION
                     }
-                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && b != U_LATIN_CAPITAL_LETTER_E {
+                    if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 && codePoint != U_LATIN_CAPITAL_LETTER_E {
                         possibleState ^= _DOCUMENT_TYPE_DECLARATION_HEAD
                     }
                 case 7:
-                    if possibleState & _NOTATION_DECLARATION > 0 && b != U_LATIN_CAPITAL_LETTER_N {
+                    if possibleState & _NOTATION_DECLARATION > 0 && codePoint != U_LATIN_CAPITAL_LETTER_N {
                         possibleState ^= _NOTATION_DECLARATION
                     }
                     if possibleState & _ELEMENT_DECLARATION > 0 {
-                        if b == U_SPACE || b == U_LINE_FEED || b == U_CARRIAGE_RETURN || b == U_CHARACTER_TABULATION {
+                        if codePoint == U_SPACE || codePoint == U_LINE_FEED || codePoint == U_CARRIAGE_RETURN || codePoint == U_CHARACTER_TABULATION {
                             state = .ELEMENT_DECLARATION
                             break
                         }
@@ -1320,7 +1328,7 @@ public class XParser: Parser {
                         }
                     }
                     if possibleState & _ATTRIBUTE_LIST_DECLARATION > 0 {
-                        if b == U_SPACE || b == U_LINE_FEED || b == U_CARRIAGE_RETURN || b == U_CHARACTER_TABULATION {
+                        if codePoint == U_SPACE || codePoint == U_LINE_FEED || codePoint == U_CARRIAGE_RETURN || codePoint == U_CHARACTER_TABULATION {
                             state = .ATTRIBUTE_LIST_DECLARATION
                             break
                         }
@@ -1329,7 +1337,7 @@ public class XParser: Parser {
                         }
                     }
                     if possibleState & _DOCUMENT_TYPE_DECLARATION_HEAD > 0 {
-                        if b == U_SPACE || b == U_LINE_FEED || b == U_CARRIAGE_RETURN || b == U_CHARACTER_TABULATION {
+                        if codePoint == U_SPACE || codePoint == U_LINE_FEED || codePoint == U_CARRIAGE_RETURN || codePoint == U_CHARACTER_TABULATION {
                             state = .DOCUMENT_TYPE_DECLARATION_HEAD
                             break
                         }
@@ -1339,7 +1347,7 @@ public class XParser: Parser {
                     }
                 case 8:
                     if possibleState & _NOTATION_DECLARATION > 0 {
-                        if b == U_SPACE || b == U_LINE_FEED || b == U_CARRIAGE_RETURN || b == U_CHARACTER_TABULATION {
+                        if codePoint == U_SPACE || codePoint == U_LINE_FEED || codePoint == U_CARRIAGE_RETURN || codePoint == U_CHARACTER_TABULATION {
                             state = .NOTATION_DECLARATION
                             break
                         }
@@ -1450,7 +1458,7 @@ public class XParser: Parser {
                         state = outerState; outerState = .TEXT
                     }
                 case U_QUOTATION_MARK, U_APOSTROPHE:
-                    if b == quoteSign {
+                    if codePoint == quoteSign {
                         quoteSign = 0
                     }
                     else {
@@ -1472,7 +1480,7 @@ public class XParser: Parser {
                 }
             /* 14 */
             case .XML_DECLARATION_FINISHING:
-                if b == U_GREATER_THAN_SIGN {
+                if codePoint == U_GREATER_THAN_SIGN {
                     if someDocumentTypeDeclaration || someElement {
                         try error("misplaced XML declaration")
                     }

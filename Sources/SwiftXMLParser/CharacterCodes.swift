@@ -6,6 +6,10 @@
 
 import Foundation
 
+let U_BOM_1: Data.Element = 0xEF
+let U_BOM_2: Data.Element = 0xBB
+let U_BOM_3: Data.Element = 0xBF
+
 typealias UnicodeCodePoint = UInt32
 
 let U_MAX_ASCII: UnicodeCodePoint = 0x7E
@@ -67,6 +71,3 @@ let U_LATIN_SMALL_LETTER_X: UnicodeCodePoint = 0x78
 let U_LATIN_SMALL_LETTER_Z: UnicodeCodePoint = 0x7A
 let U_LEFT_CURLY_BRACKET: UnicodeCodePoint = 0x7B
 let U_RIGHT_CURLY_BRACKET: UnicodeCodePoint = 0x7D
-let U_BOM_1: UnicodeCodePoint = 0xEF
-let U_BOM_2: UnicodeCodePoint = 0xBB
-let U_BOM_3: UnicodeCodePoint = 0xBF
