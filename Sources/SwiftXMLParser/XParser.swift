@@ -938,8 +938,11 @@ public class XParser: Parser {
                                     dataRange: dataRange
                                 )
                             }
+                            state = .TEXT
                         }
-                        state = b == U_LEFT_SQUARE_BRACKET ? .INTERNAL_SUBSET : .TEXT
+                        else {
+                            state = .INTERNAL_SUBSET
+                        }
                     case .ENTITY_DECLARATION:
                         var success = false
                         if !items.isEmpty, let entityName = (items[0] as? tokenParseResult)?.value {
@@ -1040,9 +1043,7 @@ public class XParser: Parser {
                         if (!success) {
                             try error("incorrect entity declaration")
                         }
-                        if state != .DOCUMENT_TYPE_DECLARATION_HEAD {
-                            state = .INTERNAL_SUBSET
-                        }
+                        state = .INTERNAL_SUBSET
                         outerState = .TEXT
                         parsedBefore = binaryPosition + 1
                         setMainStart()
@@ -1106,6 +1107,7 @@ public class XParser: Parser {
                                     }
                                 }
                             }
+                            state = .INTERNAL_SUBSET
                         }
                         if !success {
                             try error("incorrect notation declaration")
@@ -1116,8 +1118,6 @@ public class XParser: Parser {
                         try error("fatal program error: unexpected state")
                     }
                     items.removeAll()
-                    state = .INTERNAL_SUBSET
-                    outerState = .TEXT
                     parsedBefore = binaryPosition + 1
                 case U_QUOTATION_MARK, U_APOSTROPHE:
                     if tokenStart >= 0 {
