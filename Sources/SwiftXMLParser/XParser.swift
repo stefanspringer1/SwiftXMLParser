@@ -59,9 +59,12 @@ public class XParser: Parser {
     
     let textAllowedInElementWithName: ((String) -> Bool)?
     
-    public init(internalEntityResolver: InternalEntityResolver? = nil, textAllowedInElementWithName: ((String) -> Bool)? = nil) {
+    let debugWriter: ((String) -> ())?
+    
+    public init(internalEntityResolver: InternalEntityResolver? = nil, textAllowedInElementWithName: ((String) -> Bool)? = nil, debugWriter: ((String) -> ())? = nil) {
         self.internalEntityResolver = internalEntityResolver
         self.textAllowedInElementWithName = textAllowedInElementWithName
+        self.debugWriter = debugWriter
     }
     
     public func parse(
@@ -283,7 +286,7 @@ public class XParser: Parser {
                 try error("x\(String(format: "%X", codePoint)) is not a Unicode codepoint")
             }
             
-            //print("@ \(line):\(column) (\(binaryPosition)): \(outerState)/\(state): \(characterCitation(codePoint)) (WHITESPACE: \(isWhitespace))")
+            debugWriter?("@ \(line):\(column) (#\(binaryPosition) in data): \(characterCitation(codePoint)) in \(state) in \(outerState) (whitespace was: \(isWhitespace))")
             
             switch state {
             /* 1 */
@@ -1013,7 +1016,9 @@ public class XParser: Parser {
                         if (!success) {
                             try error("incorrect entity declaration")
                         }
-                        state = .INTERNAL_SUBSET
+                        if state != .DOCUMENT_TYPE_DECLARATION_HEAD {
+                            state = .INTERNAL_SUBSET
+                        }
                         outerState = .TEXT
                         parsedBefore = binaryPosition + 1
                         setMainStart()
