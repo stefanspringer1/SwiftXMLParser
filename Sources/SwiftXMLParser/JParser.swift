@@ -172,7 +172,7 @@ public class JParser: Parser {
             }
             
             if expectedUTF8Rest > 0 {
-                break binaryLoop
+                continue binaryLoop
             }
             
             if lastCodePoint == U_LINE_FEED {
