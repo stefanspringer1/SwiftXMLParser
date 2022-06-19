@@ -824,25 +824,29 @@ public class XParser: Parser {
                 }
             /* 9 */
             case .COMMENT:
-                switch codePoint {
-                case U_GREATER_THAN_SIGN:
-                    if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS {
-                        let text = String(decoding: data.subdata(in: parsedBefore..<binaryPosition-2), as: UTF8.self)
-                        broadcast { (eventHandler,textRange,dataRange) in
-                            eventHandler.comment(
-                                text: text,
-                                textRange: textRange,
-                                dataRange: dataRange
-                            )
+                if parsedBefore <= binaryPosition - 2 {
+                    switch codePoint {
+                    case U_GREATER_THAN_SIGN:
+                        print(parsedBefore)
+                        print(binaryPosition)
+                        if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS {
+                            let text = String(decoding: data.subdata(in: parsedBefore..<binaryPosition-2), as: UTF8.self)
+                            broadcast { (eventHandler,textRange,dataRange) in
+                                eventHandler.comment(
+                                    text: text,
+                                    textRange: textRange,
+                                    dataRange: dataRange
+                                )
+                            }
+                            parsedBefore = binaryPosition + 1
+                            setMainStart()
+                            state = outerState
+                            outerState = .TEXT
                         }
-                        parsedBefore = binaryPosition + 1
-                        setMainStart()
-                        state = outerState
-                        outerState = .TEXT
-                    }
-                default:
-                    if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS && binaryPosition > parsedBefore {
-                        try error("\"--\" in comment not marking the end of it")
+                    default:
+                        if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS && binaryPosition > parsedBefore {
+                            try error("\"--\" in comment not marking the end of it")
+                        }
                     }
                 }
             /* 10 */
