@@ -827,8 +827,6 @@ public class XParser: Parser {
                 if parsedBefore <= binaryPosition - 2 {
                     switch codePoint {
                     case U_GREATER_THAN_SIGN:
-                        print(parsedBefore)
-                        print(binaryPosition)
                         if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS {
                             let text = String(decoding: data.subdata(in: parsedBefore..<binaryPosition-2), as: UTF8.self)
                             broadcast { (eventHandler,textRange,dataRange) in
