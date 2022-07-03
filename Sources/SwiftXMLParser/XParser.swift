@@ -1643,7 +1643,8 @@ public class XParser: Parser {
                 /* 14 */
                 case .XML_DECLARATION_FINISHING:
                     if codePoint == U_GREATER_THAN_SIGN {
-                        if someDocumentTypeDeclaration || someElement {
+                        let correctPlacedInExternalEntity = !sleepingParsePositions.isEmpty && mainParsedBefore == 0
+                        if !correctPlacedInExternalEntity && (someDocumentTypeDeclaration || someElement) {
                             try error("misplaced XML declaration")
                         }
                         if token != nil {
@@ -1661,7 +1662,18 @@ public class XParser: Parser {
                             default: try error("unkonwn attribute \"\(attributeName)\" in XML declaration")
                             }
                         }
-                        if let theVersion = version {
+                        if correctPlacedInExternalEntity {
+                            if let theEncoding = encoding, !["ascii", "us-ascii", "utf8", "utf-8"].contains(theEncoding.lowercased()) {
+                                let baseMessage = "uncorrect encoding \"\(theEncoding)\" noted via text declaration in external parsed entity"
+                                if let currentExternalParsedEntityURL = currentExternalParsedEntityURLs.last {
+                                    try error("\(baseMessage): \(currentExternalParsedEntityURL.path)")
+                                }
+                                else {
+                                    try error(baseMessage)
+                                }
+                            }
+                        }
+                        else if let theVersion = version {
                             broadcast { (eventHandler,textRange,dataRange) in
                                 eventHandler.xmlDeclaration(
                                     version: theVersion,
@@ -1680,6 +1692,7 @@ public class XParser: Parser {
                         state = .TEXT
                         isWhitespace = true
                         parsedBefore = binaryPosition + 1
+                        setMainStart(delayed: true)
                     }
                     else {
                         try error("expecting \(characterCitation(U_GREATER_THAN_SIGN)) to end XML declaration")
