@@ -82,7 +82,8 @@ public class XTestParsePrinter: XEventHandler {
     
     public var errors = [Error]()
     
-    public func enterExternalDataSource(data: Data, url: URL?) {
+    public func enterExternalDataSource(data: Data, entityName: String?, url: URL?) {
+        print("entering external parsed entity: name: \"\(entityName ?? "")\", path: [\(url?.path ?? "")]")
         sleepingLines.append(self.lines)
         sleepingDatas.append(self.data)
         self.data = data
@@ -90,6 +91,7 @@ public class XTestParsePrinter: XEventHandler {
     }
     
     public func leaveExternalDataSource() {
+        print("leaving external parsed entity")
         if let awakenedLines = sleepingLines.popLast(),
            let awakenedData = sleepingDatas.popLast() {
             lines = awakenedLines

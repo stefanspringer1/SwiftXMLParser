@@ -53,16 +53,18 @@ fileprivate struct quotedParseResult: itemParseResult {
     public var description: String { return "\"" + value.xmlEscpape() + "\"" }
 }
 
-struct ParsePosition {
-    var binaryPosition = -1
-    var parsedBefore = 1
-    var mainParsedBefore = 1
-    var mainStartLine = 1
-    var mainStartColumn = 1
-    var line = 1
-    var lastLine = 1
-    var column = 0
-    var lastColumn = 1
+struct ParsingDataForSource {
+    let binaryPosition: Int
+    let parsedBefore: Int
+    let mainParsedBefore: Int
+    let mainStartLine: Int
+    let mainStartColumn: Int
+    let line: Int
+    let lastLine: Int
+    let column: Int
+    let lastColumn: Int
+    let lastCodePoint: UnicodeCodePoint
+    let lastLastCodePoint: UnicodeCodePoint
 }
 
 public class XParser: Parser {
@@ -255,10 +257,10 @@ public class XParser: Parser {
         var data = _data
         var activeDataIterator = data.makeIterator()
         
-        var sleepingParsePositions = [ParsePosition]()
+        var sleepingParsePositions = [ParsingDataForSource]()
         
         func newParsePosition() {
-            sleepingParsePositions.append(ParsePosition(
+            sleepingParsePositions.append(ParsingDataForSource(
                 binaryPosition: binaryPosition,
                 parsedBefore: parsedBefore,
                 mainParsedBefore: mainParsedBefore,
@@ -267,7 +269,9 @@ public class XParser: Parser {
                 line: line,
                 lastLine: lastLine,
                 column: column,
-                lastColumn: lastColumn
+                lastColumn: lastColumn,
+                lastCodePoint: lastCodePoint,
+                lastLastCodePoint: lastLastCodePoint
             ))
             binaryPosition = -1
             parsedBefore = 0
@@ -278,6 +282,8 @@ public class XParser: Parser {
             lastLine = 1
             column = 0
             lastColumn = 1
+            lastCodePoint = 0
+            lastLastCodePoint = 0
         }
         
         func restoreParsePosition() {
@@ -291,6 +297,8 @@ public class XParser: Parser {
                 lastLine = sleepingParsePosition.lastLine
                 column = sleepingParsePosition.column
                 lastColumn = sleepingParsePosition.lastColumn
+                lastCodePoint = sleepingParsePosition.lastCodePoint
+                lastLastCodePoint = sleepingParsePosition.lastLastCodePoint
             }
         }
         
@@ -799,12 +807,10 @@ public class XParser: Parser {
                                     let url = theSourceURL.appendingPathComponent(externalParsedEntityPath)
                                     currentExternalParsedEntityURLs.append(url)
                                     let path = url.path
-                                    print(">>>>>>> [\(path)]")
                                     try intoFile(path: path)
                                     broadcast() { (eventHandler,textRange,dataRange) in
-                                        eventHandler.enterExternalDataSource(data: data, url: url)
+                                        eventHandler.enterExternalDataSource(data: data, entityName: entityText, url: url)
                                     }
-                                    print("<<<<<<<")
                                 }
                                 else {
                                     broadcast { (eventHandler,textRange,dataRange) in
