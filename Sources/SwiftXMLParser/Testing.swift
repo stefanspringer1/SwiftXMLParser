@@ -116,7 +116,7 @@ public class XTestParsePrinter: XEventHandler {
         
         func correctedRightIndex(_ _rightIndex: Int?, count: Int, hasNextLine: Bool) -> Int {
             var rightIndex = _rightIndex
-            if rightIndex == count + 1 && hasNextLine {
+            if (rightIndex == count + 1 || rightIndex == count + 2) && hasNextLine {
                 rightIndex = count
             }
             return rightIndex ?? count
