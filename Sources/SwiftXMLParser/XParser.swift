@@ -334,18 +334,19 @@ public class XParser: Parser {
                     }
                     else {
                         binaryPosition += 1
-                        if binaryPosition > parsedBefore {
+                        if !texts.isEmpty || binaryPosition > parsedBefore {
                             broadcast(
                                 endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryPosition
                             ) { (eventHandler,textRange,dataRange) in
                                 eventHandler.text(
-                                    text: String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self),
+                                    text: texts.joined() + String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self),
                                     whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
                                     textRange: textRange,
                                     dataRange: dataRange
                                 )
                             }
                         }
+                        texts.removeAll()
                     }
                     broadcast() { (eventHandler,textRange,dataRange) in
                         eventHandler.leaveExternalDataSource()
@@ -768,6 +769,8 @@ public class XParser: Parser {
                                     break whitespaceTest
                                 }
                             }
+                            state = .TEXT
+                            parsedBefore = binaryPosition + 1
                         }
                         else if outerState == .TEXT {
                             if !texts.isEmpty {
