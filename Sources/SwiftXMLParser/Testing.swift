@@ -65,14 +65,14 @@ public class XSimpleInternalEntityResolver: InternalEntityResolver {
     }
 }
 
+func linesFromData(data: Data) -> [String] {
+    let text = String(data: data, encoding: String.Encoding.utf8)!
+    return text.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false).map{ String($0) }
+}
+
 public class XTestParsePrinter: XEventHandler {
     
     var writer: XTestWriter
-    
-    static func linesFromData(data: Data) -> [String] {
-        let text = String(data: data, encoding: String.Encoding.utf8)!
-        return text.split(separator: "\n", omittingEmptySubsequences: false).map{ String($0) }
-    }
     
     var lines: [String]
     var data: Data
@@ -86,7 +86,7 @@ public class XTestParsePrinter: XEventHandler {
         sleepingLines.append(self.lines)
         sleepingDatas.append(self.data)
         self.data = data
-        self.lines = XTestParsePrinter.linesFromData(data: self.data)
+        self.lines = linesFromData(data: self.data)
     }
     
     public func leaveExternalDataSource() {
@@ -99,7 +99,7 @@ public class XTestParsePrinter: XEventHandler {
     
     public init(data: Data, writer: XTestWriter) throws {
         self.data = data
-        self.lines = XTestParsePrinter.linesFromData(data: data)
+        self.lines = linesFromData(data: data)
         self.writer = writer
     }
     
