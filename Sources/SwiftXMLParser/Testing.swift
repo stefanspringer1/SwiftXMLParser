@@ -16,13 +16,13 @@ public class XTestPrinter: XTestWriter {
     public init() {}
 }
 
-public func xParseTest(forData data: Data, writer: XTestWriter = XTestPrinter(), fullDebugOutput: Bool = false) {
+public func xParseTest(forData data: Data, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) {
     do {
         try XParser(
             internalEntityResolver: XSimpleInternalEntityResolver(entityInAttributeTriggersError: false),
             debugWriter: fullDebugOutput ? { writer.writeLine($0) } : nil
         )
-        .parse(fromData: data, eventHandlers: [
+        .parse(fromData: data, sourceInfo: sourceInfo, eventHandlers: [
             XTestParsePrinter(data: data, writer: writer)
         ])
     }
@@ -31,16 +31,16 @@ public func xParseTest(forData data: Data, writer: XTestWriter = XTestPrinter(),
     }
 }
 
-public func xParseTest(forText text: String, writer: XTestWriter = XTestPrinter(), fullDebugOutput: Bool = false) {
-    xParseTest(forData: text.data(using: .utf8)!, writer: writer, fullDebugOutput: fullDebugOutput)
+public func xParseTest(forText text: String, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) {
+    xParseTest(forData: text.data(using: .utf8)!, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
 }
 
-public func xParseTest(forURL url: URL, writer: XTestWriter = XTestPrinter(), fullDebugOutput: Bool = false) throws {
-    xParseTest(forData: try Data(contentsOf: url), writer: writer, fullDebugOutput: fullDebugOutput)
+public func xParseTest(forURL url: URL, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) throws {
+    xParseTest(forData: try Data(contentsOf: url), writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
 }
 
-public func xParseTest(forPath path: String, writer: XTestWriter = XTestPrinter(), fullDebugOutput: Bool = false) throws {
-    xParseTest(forData: try Data(contentsOf: URL(fileURLWithPath: path)), writer: writer, fullDebugOutput: fullDebugOutput)
+public func xParseTest(forPath path: String, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) throws {
+    xParseTest(forData: try Data(contentsOf: URL(fileURLWithPath: path)), writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
 }
 
 public protocol XTestWriter {
@@ -68,14 +68,38 @@ public class XSimpleInternalEntityResolver: InternalEntityResolver {
 public class XTestParsePrinter: XEventHandler {
     
     var writer: XTestWriter
+    
+    static func linesFromData(data: Data) -> [String] {
+        let text = String(data: data, encoding: String.Encoding.utf8)!
+        return text.split(separator: "\n", omittingEmptySubsequences: false).map{ String($0) }
+    }
+    
     var lines: [String]
     var data: Data
+    
+    var sleepingLines = [[String]]()
+    var sleepingDatas = [Data]()
+    
     public var errors = [Error]()
+    
+    public func enterExternalDataSource(data: Data, url: URL?) {
+        sleepingLines.append(self.lines)
+        sleepingDatas.append(self.data)
+        self.data = data
+        self.lines = XTestParsePrinter.linesFromData(data: self.data)
+    }
+    
+    public func leaveExternalDataSource() {
+        if let awakenedLines = sleepingLines.popLast(),
+           let awakenedData = sleepingDatas.popLast() {
+            lines = awakenedLines
+            data = awakenedData
+        }
+    }
     
     public init(data: Data, writer: XTestWriter) throws {
         self.data = data
-        let text = String(data: data, encoding: String.Encoding.utf8)!
-        lines = text.split(separator: "\n", omittingEmptySubsequences: false).map{ String($0) }
+        self.lines = XTestParsePrinter.linesFromData(data: data)
         self.writer = writer
     }
     
