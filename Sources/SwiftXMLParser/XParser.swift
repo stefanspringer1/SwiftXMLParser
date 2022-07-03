@@ -309,6 +309,8 @@ public class XParser: Parser {
             newParsePosition()
         }
         
+        var ignoreNextLinebreak = 0
+        
         binaryLoop: while true {
             
             var nextB = activeDataIterator.next()
@@ -365,6 +367,33 @@ public class XParser: Parser {
             if let b = nextB {
             
                 binaryPosition += 1
+                
+                if ignoreNextLinebreak == 2 {
+                    if b == U_LINE_FEED {
+                        ignoreNextLinebreak = 0
+                        parsedBefore = binaryPosition + 1
+                        mainParsedBefore = parsedBefore
+                        continue binaryLoop
+                    }
+                    else if b == U_CARRIAGE_RETURN {
+                        ignoreNextLinebreak = 1
+                        continue binaryLoop
+                    }
+                    else {
+                        ignoreNextLinebreak = 0
+                    }
+                }
+                else if ignoreNextLinebreak == 1 {
+                    if b == U_LINE_FEED {
+                        ignoreNextLinebreak = 0
+                        parsedBefore = binaryPosition + 1
+                        mainParsedBefore = parsedBefore
+                        continue binaryLoop
+                    }
+                    else {
+                        ignoreNextLinebreak = 0
+                    }
+                }
                 
                 // check UTF-8 encoding:
                 if expectedUTF8Rest > 0 {
@@ -1675,6 +1704,7 @@ public class XParser: Parser {
                                     try error(baseMessage)
                                 }
                             }
+                            ignoreNextLinebreak = 2
                         }
                         else if let theVersion = version {
                             broadcast { (eventHandler,textRange,dataRange) in
