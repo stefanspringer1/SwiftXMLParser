@@ -273,7 +273,11 @@ extension String {
     }
     
     func cited() -> String {
-        return self.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "\\n").replacingOccurrences(of: "\"", with: "\\\"")
+        return self
+            .replacingOccurrences(of: "\r\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\n")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\"", with: "\\\"")
         //        return self.debugDescription
     }
     
