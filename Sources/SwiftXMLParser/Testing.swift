@@ -19,6 +19,7 @@ public class XTestPrinter: XTestWriter {
 public func xParseTest(forData data: Data, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) {
     do {
         try XParser(
+            internalEntityAutoResolve: true,
             internalEntityResolver: XSimpleInternalEntityResolver(entityInAttributeTriggersError: false),
             debugWriter: fullDebugOutput ? { writer.writeLine($0) } : nil
         )
@@ -82,16 +83,21 @@ public class XTestParsePrinter: XEventHandler {
     
     public var errors = [Error]()
     
-    public func enterExternalDataSource(data: Data, entityName: String?, url: URL?) {
-        print("entering external parsed entity: name: \"\(entityName ?? "")\", path: [\(url?.path ?? "")]")
+    public func enterDataSource(data: Data, entityName: String?, url: URL?) {
+        if let path = url?.path {
+            print("entering replacement text for external parsed entity: name \"\(entityName ?? "")\", path [\(path)]")
+        }
+        else {
+            print("entering replacement text for internal entity: name \"\(entityName ?? "")\"")
+        }
         sleepingLines.append(self.lines)
         sleepingDatas.append(self.data)
         self.data = data
         self.lines = linesFromData(data: self.data)
     }
     
-    public func leaveExternalDataSource() {
-        print("leaving external parsed entity")
+    public func leaveDataSource() {
+        print("leaving replacement text")
         if let awakenedLines = sleepingLines.popLast(),
            let awakenedData = sleepingDatas.popLast() {
             lines = awakenedLines

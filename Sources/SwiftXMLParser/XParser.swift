@@ -69,17 +69,20 @@ struct ParsingDataForSource {
 
 public class XParser: Parser {
     
+    let internalEntityAutoResolve: Bool
     let internalEntityResolver: InternalEntityResolver?
     let textAllowedInElementWithName: ((String) -> Bool)?
     let insertExternalParsedEntities: Bool
     let debugWriter: ((String) -> ())?
     
     public init(
+        internalEntityAutoResolve: Bool = false,
         internalEntityResolver: InternalEntityResolver? = nil,
         textAllowedInElementWithName: ((String) -> Bool)? = nil,
         insertExternalParsedEntities: Bool = true,
         debugWriter: ((String) -> ())? = nil
     ) {
+        self.internalEntityAutoResolve = internalEntityAutoResolve
         self.internalEntityResolver = internalEntityResolver
         self.textAllowedInElementWithName = textAllowedInElementWithName
         self.insertExternalParsedEntities = insertExternalParsedEntities
@@ -209,6 +212,7 @@ public class XParser: Parser {
         var expectedUTF8Rest = 0
         
         var declaredEntityNames: Set<String> = []
+        var internalEntityDatas = [String:Data]()
         var externalParsedEntityPaths = [String:String]() // entity name -> path to file
         var declaredNotationNames: Set<String> = []
         var declaredElementNames: Set<String> = []
@@ -302,11 +306,16 @@ public class XParser: Parser {
             }
         }
         
-        func intoFile(path: String) throws {
+        func intoData(newData: Data) {
             sleepingDatas.append((data,activeDataIterator,elementLevel))
-            data = try Data(contentsOf: URL(fileURLWithPath: path))
+            data = newData
             activeDataIterator = data.makeIterator()
             newParsePosition()
+        }
+        
+        func intoFile(path: String) throws {
+            let newData = try Data(contentsOf: URL(fileURLWithPath: path))
+            intoData(newData: newData)
         }
         
         var ignoreNextLinebreak = 0
@@ -360,7 +369,7 @@ public class XParser: Parser {
                         texts.removeAll()
                     }
                     broadcast() { (eventHandler,textRange,dataRange) in
-                        eventHandler.leaveExternalDataSource()
+                        eventHandler.leaveDataSource()
                     }
                     data = awakenedData
                     activeDataIterator = awakenedDataIterator
@@ -788,16 +797,28 @@ public class XParser: Parser {
                             }
                             else {
                                 isExternal = externalEntityNames.contains(entityText)
-                                if !isExternal, let theInternalEntityResolver = internalEntityResolver {
-                                    if outerState == .START_OR_EMPTY_TAG {
-                                        if name == nil {
-                                            try error("missing element name")
+                                if !isExternal {
+                                    if internalEntityAutoResolve, let autoResolutionData = internalEntityDatas[entityText] {
+                                        parsedBefore = binaryPosition + 1
+                                        state = .TEXT
+                                        setMainStart(delayed: true)
+                                        intoData(newData: autoResolutionData)
+                                        broadcast() { (eventHandler,textRange,dataRange) in
+                                            eventHandler.enterDataSource(data: data, entityName: entityText, url: nil)
                                         }
-                                        if token == nil {
-                                            try error("missing attribute name")
-                                        }
+                                        continue binaryLoop
                                     }
-                                    resolution = theInternalEntityResolver.resolve(entityWithName: entityText, forAttributeWithName: token, atElementWithName: name)
+                                    else if let theInternalEntityResolver = internalEntityResolver {
+                                        if outerState == .START_OR_EMPTY_TAG {
+                                            if name == nil {
+                                                try error("missing element name")
+                                            }
+                                            if token == nil {
+                                                try error("missing attribute name")
+                                            }
+                                        }
+                                        resolution = theInternalEntityResolver.resolve(entityWithName: entityText, forAttributeWithName: token, atElementWithName: name)
+                                    }
                                 }
                             }
                         }
@@ -812,7 +833,7 @@ public class XParser: Parser {
                             state = .TEXT
                             parsedBefore = binaryPosition + 1
                         }
-                        else if outerState == .TEXT {
+                        else if outerState == .TEXT || outerState == .ENTITY_DECLARATION {
                             if !texts.isEmpty {
                                 let text = texts.joined()
                                 if elementLevel > 0 {
@@ -844,15 +865,17 @@ public class XParser: Parser {
                             if isExternal {
                                 if insertExternalParsedEntities, let externalParsedEntityPath = externalParsedEntityPaths[entityText],
                                 let theSourceURL = directoryURL {
-                                    parsedBefore = binaryPosition + 1
-                                    state = .TEXT
-                                    setMainStart(delayed: true)
+                                    
                                     let url = theSourceURL.appendingPathComponent(externalParsedEntityPath)
                                     currentExternalParsedEntityURLs.append(url)
                                     let path = url.path
+                                    
+                                    parsedBefore = binaryPosition + 1
+                                    state = .TEXT
+                                    setMainStart(delayed: true)
                                     try intoFile(path: path)
                                     broadcast() { (eventHandler,textRange,dataRange) in
-                                        eventHandler.enterExternalDataSource(data: data, entityName: entityText, url: url)
+                                        eventHandler.enterDataSource(data: data, entityName: entityText, url: url)
                                     }
                                 }
                                 else {
@@ -887,7 +910,7 @@ public class XParser: Parser {
                                 try error("\(descriptionStart) entity \"\(entityText)\" in attribute \"\(theAttributeName)\" of element \"\(theElementName)\"")
                             }
                             else {
-                                try error("\(descriptionStart) entity \"\(entityText)\" in striclty textual content")
+                                try error("\(descriptionStart) entity \"\(entityText)\" in strictly textual content")
                             }
                         }
                     }
@@ -1184,6 +1207,9 @@ public class XParser: Parser {
                                     if let value = (items[1] as? quotedParseResult)?.value {
                                         if declaredEntityNames.contains(entityName) {
                                             try error("entity with name \"\(entityName)\" declared more than once")
+                                        }
+                                        if internalEntityAutoResolve {
+                                            internalEntityDatas[entityName] = value.data(using: .utf8)
                                         }
                                         broadcast { (eventHandler,textRange,dataRange) in
                                             eventHandler.internalEntityDeclaration(
