@@ -326,7 +326,7 @@ public class XParser: Parser {
             newParsePosition()
         }
         
-        var ignoreNextLinebreak = 0
+        var ignoreNextLinebreak = -1
         
         binaryLoop: while true {
             
@@ -448,6 +448,7 @@ public class XParser: Parser {
                 }
                 
                 if lastCodePoint == U_LINE_FEED {
+                    debugWriter?("new line")
                     line += 1
                     column = 0
                 }
@@ -462,20 +463,23 @@ public class XParser: Parser {
                     try error("x\(String(format: "%X", codePoint)) is not a Unicode codepoint")
                 }
                 
-                debugWriter?("@ \(line):\(column) (#\(binaryPosition) in data): \(characterCitation(codePoint)) in \(state) in \(outerState) (whitespace was: \(isWhitespace))")
+                if ignoreNextLinebreak == 0 {
+                    setMainStart()
+                    ignoreNextLinebreak = -1
+                }
+                
+                debugWriter?("@ \(line):\(column) (#\(binaryPosition) in data): \(characterCitation(codePoint)) in \(state) in \(outerState) (whitespace was: \(isWhitespace)), main start: \(mainStartLine):\(mainStartColumn)")
+                
+                var ignore = false
                 
                 if ignoreNextLinebreak == 2 {
                     if b == U_LINE_FEED {
                         ignoreNextLinebreak = 0
-                        parsedBefore = binaryPosition + 1
-                        setMainStart(delayed: true)
-                        continue binaryLoop
+                        ignore = true
                     }
                     else if b == U_CARRIAGE_RETURN {
                         ignoreNextLinebreak = 1
-                        parsedBefore = binaryPosition + 1
-                        setMainStart(delayed: true)
-                        continue binaryLoop
+                        ignore = true
                     }
                     else {
                         ignoreNextLinebreak = 0
@@ -484,13 +488,25 @@ public class XParser: Parser {
                 else if ignoreNextLinebreak == 1 {
                     if b == U_LINE_FEED {
                         ignoreNextLinebreak = 0
-                        parsedBefore = binaryPosition + 1
-                        setMainStart(delayed: true)
-                        continue binaryLoop
+                        ignore = true
                     }
                     else {
                         ignoreNextLinebreak = 0
                     }
+                }
+                else if ignoreNextLinebreak == 0 {
+                    ignoreNextLinebreak = -1
+                }
+                
+                if ignore {
+                    debugWriter?("ignore!")
+                    parsedBefore = binaryPosition + 1
+                    setMainStart(delayed: true)
+                    lastLastCodePoint = lastCodePoint
+                    lastCodePoint = codePoint
+                    lastLine = line
+                    lastColumn = column
+                    continue binaryLoop
                 }
                 
                 switch state {
@@ -817,7 +833,7 @@ public class XParser: Parser {
                                     if internalEntityAutoResolve, let autoResolutionData = internalEntityDatas[entityText] {
                                         if !texts.isEmpty {
                                             broadcast(
-                                                endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryPosition
+                                                endLine: beforeEntityLine, endColumn: beforeEntityColumn, binaryUntil: parsedBefore - 1
                                             ) { (eventHandler,textRange,dataRange) in
                                                 eventHandler.text(
                                                     text: texts.joined(),
@@ -827,6 +843,7 @@ public class XParser: Parser {
                                                 )
                                             }
                                             texts.removeAll()
+                                            
                                         }
                                         broadcast() { (eventHandler,textRange,dataRange) in
                                             eventHandler.enterInternalDataSource(data: autoResolutionData, entityName: entityText, textRange: textRange, dataRange: dataRange)
