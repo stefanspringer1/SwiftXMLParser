@@ -372,7 +372,7 @@ public class XParser: Parser {
                                 endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryPosition
                             ) { (eventHandler,textRange,dataRange) in
                                 eventHandler.text(
-                                    text: texts.joined() + String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self),
+                                    text: String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self),
                                     whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
                                     textRange: textRange,
                                     dataRange: dataRange
@@ -387,7 +387,9 @@ public class XParser: Parser {
                     }
                     data = awakenedData
                     activeDataIterator = awakenedDataIterator
-                    _ = currentExternalParsedEntityURLs.popLast()
+                    if sleepReason == .externalSource {
+                        _ = currentExternalParsedEntityURLs.popLast()
+                    }
                     restoreParsePosition()
                     nextB = activeDataIterator.next()
                 }
@@ -818,6 +820,19 @@ public class XParser: Parser {
                                 isExternal = externalEntityNames.contains(entityText)
                                 if !isExternal {
                                     if internalEntityAutoResolve, let autoResolutionData = internalEntityDatas[entityText] {
+                                        if !texts.isEmpty {
+                                            broadcast(
+                                                endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryPosition
+                                            ) { (eventHandler,textRange,dataRange) in
+                                                eventHandler.text(
+                                                    text: texts.joined(),
+                                                    whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
+                                                    textRange: textRange,
+                                                    dataRange: dataRange
+                                                )
+                                            }
+                                            texts.removeAll()
+                                        }
                                         broadcast() { (eventHandler,textRange,dataRange) in
                                             eventHandler.enterInternalDataSource(data: data, entityName: entityText, textRange: textRange, dataRange: dataRange)
                                         }
