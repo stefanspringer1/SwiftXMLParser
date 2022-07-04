@@ -53,7 +53,29 @@ fileprivate struct quotedParseResult: itemParseResult {
     public var description: String { return "\"" + value.xmlEscpape() + "\"" }
 }
 
-struct ParsingDataForSource {
+fileprivate enum State {
+    case TEXT
+    case ENTITY
+    case JUST_STARTED_WITH_LESS_THAN_SIGN
+    case START_OR_EMPTY_TAG
+    case EMPTY_TAG_FINISHING
+    case END_TAG
+    case UNKNOWN_DECLARATION_LIKE
+    case PROCESSING_INSTRUCTION
+    case XML_DECLARATION
+    case XML_DECLARATION_FINISHING
+    case COMMENT
+    case CDATA_SECTION
+    case ENTITY_DECLARATION
+    case NOTATION_DECLARATION
+    case ELEMENT_DECLARATION
+    case ATTRIBUTE_LIST_DECLARATION
+    case DOCUMENT_TYPE_DECLARATION_HEAD
+    case INTERNAL_SUBSET
+    case DOCUMENT_TYPE_DECLARATION_TAIL
+}
+
+fileprivate struct ParsingDataForSource {
     let binaryPosition: Int
     let parsedBefore: Int
     let mainParsedBefore: Int
@@ -182,28 +204,6 @@ public class XParser: Parser {
         var someElement = false
         var ancestors = Stack<String>()
         
-        enum State {
-            case TEXT
-            case ENTITY
-            case JUST_STARTED_WITH_LESS_THAN_SIGN
-            case START_OR_EMPTY_TAG
-            case EMPTY_TAG_FINISHING
-            case END_TAG
-            case UNKNOWN_DECLARATION_LIKE
-            case PROCESSING_INSTRUCTION
-            case XML_DECLARATION
-            case XML_DECLARATION_FINISHING
-            case COMMENT
-            case CDATA_SECTION
-            case ENTITY_DECLARATION
-            case NOTATION_DECLARATION
-            case ELEMENT_DECLARATION
-            case ATTRIBUTE_LIST_DECLARATION
-            case DOCUMENT_TYPE_DECLARATION_HEAD
-            case INTERNAL_SUBSET
-            case DOCUMENT_TYPE_DECLARATION_TAIL
-        }
-        
         var state = State.TEXT
         var outerState = State.TEXT
         
@@ -261,10 +261,10 @@ public class XParser: Parser {
         var data = _data
         var activeDataIterator = data.makeIterator()
         
-        var sleepingParsePositions = [ParsingDataForSource]()
+        var sleepingParsingDatas = [ParsingDataForSource]()
         
         func newParsePosition() {
-            sleepingParsePositions.append(ParsingDataForSource(
+            sleepingParsingDatas.append(ParsingDataForSource(
                 binaryPosition: binaryPosition,
                 parsedBefore: parsedBefore,
                 mainParsedBefore: mainParsedBefore,
@@ -291,18 +291,18 @@ public class XParser: Parser {
         }
         
         func restoreParsePosition() {
-            if let sleepingParsePosition = sleepingParsePositions.popLast() {
-                binaryPosition = sleepingParsePosition.binaryPosition
-                parsedBefore = sleepingParsePosition.parsedBefore
-                mainParsedBefore = sleepingParsePosition.mainParsedBefore
-                mainStartLine = sleepingParsePosition.mainStartLine
-                mainStartColumn = sleepingParsePosition.mainStartColumn
-                line = sleepingParsePosition.line
-                lastLine = sleepingParsePosition.lastLine
-                column = sleepingParsePosition.column
-                lastColumn = sleepingParsePosition.lastColumn
-                lastCodePoint = sleepingParsePosition.lastCodePoint
-                lastLastCodePoint = sleepingParsePosition.lastLastCodePoint
+            if let sleepingParsingData = sleepingParsingDatas.popLast() {
+                binaryPosition = sleepingParsingData.binaryPosition
+                parsedBefore = sleepingParsingData.parsedBefore
+                mainParsedBefore = sleepingParsingData.mainParsedBefore
+                mainStartLine = sleepingParsingData.mainStartLine
+                mainStartColumn = sleepingParsingData.mainStartColumn
+                line = sleepingParsingData.line
+                lastLine = sleepingParsingData.lastLine
+                column = sleepingParsingData.column
+                lastColumn = sleepingParsingData.lastColumn
+                lastCodePoint = sleepingParsingData.lastCodePoint
+                lastLastCodePoint = sleepingParsingData.lastLastCodePoint
             }
         }
         
@@ -506,7 +506,8 @@ public class XParser: Parser {
                                 }
                             }
                             else {
-                                items.append(quotedParseResult(value: String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self)))
+                                items.append(quotedParseResult(value: texts.joined()))
+                                texts.removeAll()
                             }
                             texts.removeAll()
                             quoteSign = 0
@@ -649,7 +650,8 @@ public class XParser: Parser {
                             parsedBefore = binaryPosition + 1
                         case U_SPACE, U_LINE_FEED, U_CARRIAGE_RETURN, U_CHARACTER_TABULATION, U_SOLIDUS, U_QUESTION_MARK:
                             if tokenStart >= 0 {
-                                token = String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
+                                token = texts.joined() + String(decoding: data.subdata(in: tokenStart..<binaryPosition), as: UTF8.self)
+                                texts.removeAll()
                                 if name == nil {
                                     name = token
                                     token = nil
@@ -794,6 +796,9 @@ public class XParser: Parser {
                                 else {
                                     try error("numerical character reference &\(entityText); does not correspond to a valid Unicode codepoint")
                                 }
+                            }
+                            else if outerState == .ENTITY_DECLARATION {
+                                resolution = "&\(entityText);"
                             }
                             else {
                                 isExternal = externalEntityNames.contains(entityText)
@@ -1712,7 +1717,7 @@ public class XParser: Parser {
                 /* 14 */
                 case .XML_DECLARATION_FINISHING:
                     if codePoint == U_GREATER_THAN_SIGN {
-                        let correctPlacedInExternalEntity = !sleepingParsePositions.isEmpty && mainParsedBefore == 0
+                        let correctPlacedInExternalEntity = !sleepingParsingDatas.isEmpty && mainParsedBefore == 0
                         if !correctPlacedInExternalEntity && (someDocumentTypeDeclaration || someElement) {
                             try error("misplaced XML declaration")
                         }
