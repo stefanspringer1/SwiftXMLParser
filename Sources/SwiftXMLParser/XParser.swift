@@ -319,16 +319,11 @@ public class XParser: Parser {
             }
         }
         
-        func intoData(newData: Data, dataSourceType: DataSourceType) {
+        func startNewData(newData: Data, dataSourceType: DataSourceType) {
             sleepingDatas.append((data,activeDataIterator,elementLevel,dataSourceType))
             data = newData
             activeDataIterator = data.makeIterator()
             newParsePosition()
-        }
-        
-        func intoFile(path: String) throws {
-            let newData = try Data(contentsOf: URL(fileURLWithPath: path))
-            intoData(newData: newData, dataSourceType: .externalSource)
         }
         
         var ignoreNextLinebreak = 0
@@ -834,12 +829,12 @@ public class XParser: Parser {
                                             texts.removeAll()
                                         }
                                         broadcast() { (eventHandler,textRange,dataRange) in
-                                            eventHandler.enterInternalDataSource(data: data, entityName: entityText, textRange: textRange, dataRange: dataRange)
+                                            eventHandler.enterInternalDataSource(data: autoResolutionData, entityName: entityText, textRange: textRange, dataRange: dataRange)
                                         }
                                         parsedBefore = binaryPosition + 1
                                         state = .TEXT
                                         setMainStart(delayed: true)
-                                        intoData(newData: autoResolutionData, dataSourceType: .internalSource)
+                                        startNewData(newData: autoResolutionData, dataSourceType: .internalSource)
                                         continue binaryLoop
                                     }
                                     else if let theInternalEntityResolver = internalEntityResolver {
@@ -904,14 +899,16 @@ public class XParser: Parser {
                                     currentExternalParsedEntityURLs.append(url)
                                     let path = url.path
                                     
+                                    let newData = try Data(contentsOf: URL(fileURLWithPath: path))
+                                    
                                     broadcast() { (eventHandler,textRange,dataRange) in
-                                        eventHandler.enterExternalDataSource(data: data, entityName: entityText, url: url, textRange: textRange, dataRange: dataRange)
+                                        eventHandler.enterExternalDataSource(data: newData, entityName: entityText, url: url, textRange: textRange, dataRange: dataRange)
                                     }
                                     
                                     parsedBefore = binaryPosition + 1
                                     state = .TEXT
                                     setMainStart(delayed: true)
-                                    try intoFile(path: path)
+                                    startNewData(newData: newData, dataSourceType: .externalSource)
                                 }
                                 else {
                                     broadcast { (eventHandler,textRange,dataRange) in

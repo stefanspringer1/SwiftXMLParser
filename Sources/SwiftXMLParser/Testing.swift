@@ -83,46 +83,44 @@ public class XTestParsePrinter: XEventHandler {
     
     public var errors = [Error]()
     
-    var textRangeOverride: XTextRange? = nil
-    var dataRangeOverride: XDataRange? = nil
-    
     var interDataSourceLevel = 0
     
-    public func enterInternalDataSource(data: Data, entityName: String, textRange: XTextRange?, dataRange: XDataRange?) {
-        if interDataSourceLevel == 0 {
-            textRangeOverride = textRange
-            dataRangeOverride = dataRange
-        }
-        interDataSourceLevel += 1
-        print("entering replacement text for internal entity: name \"\(entityName)\"; \(textRangeOverride!) (\(dataRangeOverride!) in data)")
-        writeExcerpt(forTextRange: textRangeOverride!, forDataRange: dataRangeOverride!)
-    }
-    
-    public func enterExternalDataSource(data: Data, entityName: String?, url: URL?, textRange: XTextRange?, dataRange: XDataRange?) {
-        print("entering replacement text for external parsed entity: name \"\(entityName ?? "")\", path [\(url?.path ?? "")]; \(textRange!) (\(dataRange!) in data)")
-        writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+    func enterDataSourceCommon(data: Data) {
         sleepingLines.append(self.lines)
         sleepingDatas.append(self.data)
         self.data = data
         self.lines = linesFromData(data: self.data)
     }
     
-    public func leaveInternalDataSource() {
-        print("leaving internal replacement text")
-        interDataSourceLevel -= 1
-        if interDataSourceLevel == 0 {
-            textRangeOverride = nil
-            dataRangeOverride = nil
-        }
-    }
-    
-    public func leaveExternalDataSource() {
-        print("leaving external replacement text")
+    func leaveDataSourceCommon() {
         if let awakenedLines = sleepingLines.popLast(),
            let awakenedData = sleepingDatas.popLast() {
             lines = awakenedLines
             data = awakenedData
         }
+    }
+    
+    public func enterInternalDataSource(data: Data, entityName: String, textRange: XTextRange?, dataRange: XDataRange?) {
+        print("entering replacement text for internal entity: name \"\(entityName)\"; \(textRange!) (\(dataRange!) in data)")
+        writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        print("  internal entity value: {\(String(data: data, encoding: String.Encoding.utf8)!)}")
+        enterDataSourceCommon(data: data)
+    }
+    
+    public func enterExternalDataSource(data: Data, entityName: String?, url: URL?, textRange: XTextRange?, dataRange: XDataRange?) {
+        print("entering replacement text for external parsed entity: name \"\(entityName ?? "")\", path [\(url?.path ?? "")]; \(textRange!) (\(dataRange!) in data)")
+        writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        enterDataSourceCommon(data: data)
+    }
+    
+    public func leaveInternalDataSource() {
+        print("leaving internal replacement text")
+        leaveDataSourceCommon()
+    }
+    
+    public func leaveExternalDataSource() {
+        print("leaving external replacement text")
+        leaveDataSourceCommon()
     }
     
     public init(data: Data, writer: XTestWriter) throws {
@@ -169,14 +167,13 @@ public class XTestParsePrinter: XEventHandler {
         }
     }
     
-    func writeBinaryExcerpt(forDataRange _dataRange: XDataRange) {
-        let dataRange = dataRangeOverride ?? _dataRange
+    func writeBinaryExcerpt(forDataRange dataRange: XDataRange) {
         writer.writeLine("  binary excerpt: {\(String(decoding: data.subdata(in: dataRange.binaryStart..<dataRange.binaryUntil), as: UTF8.self))}")
     }
     
     func writeExcerpt(forTextRange textRange: XTextRange, forDataRange dataRange: XDataRange) {
-        writeBinaryExcerpt(forDataRange: dataRangeOverride ?? dataRange)
-        writeTextExcerpt(forTextRange: textRangeOverride ?? textRange)
+        writeBinaryExcerpt(forDataRange: dataRange)
+        writeTextExcerpt(forTextRange: textRange)
     }
     
     public func documentStart() {
@@ -213,9 +210,7 @@ public class XTestParsePrinter: XEventHandler {
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
     }
     
-    public func text(text: String, whitespace: WhitespaceIndicator, textRange _textRange: XTextRange?, dataRange _dataRange: XDataRange?) {
-        let textRange = textRangeOverride ?? _textRange
-        let dataRange = dataRangeOverride ?? _dataRange
+    public func text(text: String, whitespace: WhitespaceIndicator, textRange: XTextRange?, dataRange: XDataRange?) {
         write("text: \"\(text.cited())\", whitespace indicator \(whitespace); \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
     }
