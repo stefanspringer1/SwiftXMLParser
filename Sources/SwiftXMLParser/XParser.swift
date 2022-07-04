@@ -367,7 +367,7 @@ public class XParser: Parser {
                                 endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryPosition
                             ) { (eventHandler,textRange,dataRange) in
                                 eventHandler.text(
-                                    text: String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self),
+                                    text: String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self).replacingOccurrences(of: "\r\n", with: "\n"),
                                     whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
                                     textRange: textRange,
                                     dataRange: dataRange
@@ -836,7 +836,7 @@ public class XParser: Parser {
                                                 endLine: beforeEntityLine, endColumn: beforeEntityColumn, binaryUntil: parsedBefore - 1
                                             ) { (eventHandler,textRange,dataRange) in
                                                 eventHandler.text(
-                                                    text: texts.joined(),
+                                                    text: texts.joined().replacingOccurrences(of: "\r\n", with: "\n"),
                                                     whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
                                                     textRange: textRange,
                                                     dataRange: dataRange
