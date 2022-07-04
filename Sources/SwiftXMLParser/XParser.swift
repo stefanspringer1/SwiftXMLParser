@@ -226,9 +226,18 @@ public class XParser: Parser {
         }
         
         @inline(__always) func broadcast(
+            xTextRange: XTextRange, xDataRange: XDataRange,
+            processEventHandlers: (XEventHandler,XTextRange,XDataRange) -> ()
+        ) {
+            eventHandlers.forEach { eventHandler in
+                processEventHandlers(eventHandler,xTextRange,xDataRange)
+            }
+        }
+        
+        @inline(__always) func broadcast(
             endLine: Int = line, endColumn: Int = column, binaryUntil: Int = binaryPosition + 1,
-            processEventHandlers: (XEventHandler,XTextRange,XDataRange
-        ) -> ()) {
+            processEventHandlers: (XEventHandler,XTextRange,XDataRange) -> ()
+        ) {
             let xTextRange = XTextRange(
                 startLine: mainStartLine,
                 startColumn: mainStartColumn,
@@ -239,9 +248,10 @@ public class XParser: Parser {
                 binaryStart: mainParsedBefore,
                 binaryUntil: binaryUntil
             )
-            eventHandlers.forEach { eventHandler in
-                processEventHandlers(eventHandler,xTextRange,xDataRange)
-            }
+            broadcast(
+                xTextRange: xTextRange, xDataRange: xDataRange,
+                processEventHandlers: processEventHandlers
+            )
         }
         
         broadcast { (eventHandler,XTextRange,XDataRange) in
@@ -257,7 +267,10 @@ public class XParser: Parser {
         
         typealias ElementLevel = Int
         
-        var sleepingDatas = [(Data,Data.Iterator,ElementLevel)]()
+        enum DataSourceType { case internalSource; case externalSource }
+        typealias SleepReasons = DataSourceType
+        
+        var sleepingDatas = [(Data,Data.Iterator,ElementLevel,SleepReasons)]()
         var data = _data
         var activeDataIterator = data.makeIterator()
         
@@ -306,8 +319,8 @@ public class XParser: Parser {
             }
         }
         
-        func intoData(newData: Data) {
-            sleepingDatas.append((data,activeDataIterator,elementLevel))
+        func intoData(newData: Data, dataSourceType: DataSourceType) {
+            sleepingDatas.append((data,activeDataIterator,elementLevel,dataSourceType))
             data = newData
             activeDataIterator = data.makeIterator()
             newParsePosition()
@@ -315,7 +328,7 @@ public class XParser: Parser {
         
         func intoFile(path: String) throws {
             let newData = try Data(contentsOf: URL(fileURLWithPath: path))
-            intoData(newData: newData)
+            intoData(newData: newData, dataSourceType: .externalSource)
         }
         
         var ignoreNextLinebreak = 0
@@ -324,7 +337,7 @@ public class XParser: Parser {
             
             var nextB = activeDataIterator.next()
             while nextB == nil {
-                if let (awakenedData,awakenedDataIterator,oldElementLevel) = sleepingDatas.popLast() {
+                if let (awakenedData,awakenedDataIterator,oldElementLevel,sleepReason) = sleepingDatas.popLast() {
                     if !(state == .TEXT && outerState == .TEXT) {
                         let baseMessage = "external parsed entity does not end in text mode"
                         if let currentExternalParsedEntityURL = currentExternalParsedEntityURLs.last {
@@ -368,8 +381,9 @@ public class XParser: Parser {
                         }
                         texts.removeAll()
                     }
-                    broadcast() { (eventHandler,textRange,dataRange) in
-                        eventHandler.leaveDataSource()
+                    switch sleepReason {
+                    case .internalSource:  broadcast() { (eventHandler,textRange,dataRange) in eventHandler.leaveInternalDataSource() }
+                    case .externalSource:  broadcast() { (eventHandler,textRange,dataRange) in eventHandler.leaveExternalDataSource() }
                     }
                     data = awakenedData
                     activeDataIterator = awakenedDataIterator
@@ -804,13 +818,13 @@ public class XParser: Parser {
                                 isExternal = externalEntityNames.contains(entityText)
                                 if !isExternal {
                                     if internalEntityAutoResolve, let autoResolutionData = internalEntityDatas[entityText] {
+                                        broadcast() { (eventHandler,textRange,dataRange) in
+                                            eventHandler.enterInternalDataSource(data: data, entityName: entityText, textRange: textRange, dataRange: dataRange)
+                                        }
                                         parsedBefore = binaryPosition + 1
                                         state = .TEXT
                                         setMainStart(delayed: true)
-                                        intoData(newData: autoResolutionData)
-                                        broadcast() { (eventHandler,textRange,dataRange) in
-                                            eventHandler.enterDataSource(data: data, entityName: entityText, url: nil)
-                                        }
+                                        intoData(newData: autoResolutionData, dataSourceType: .internalSource)
                                         continue binaryLoop
                                     }
                                     else if let theInternalEntityResolver = internalEntityResolver {
@@ -875,13 +889,14 @@ public class XParser: Parser {
                                     currentExternalParsedEntityURLs.append(url)
                                     let path = url.path
                                     
+                                    broadcast() { (eventHandler,textRange,dataRange) in
+                                        eventHandler.enterExternalDataSource(data: data, entityName: entityText, url: url, textRange: textRange, dataRange: dataRange)
+                                    }
+                                    
                                     parsedBefore = binaryPosition + 1
                                     state = .TEXT
                                     setMainStart(delayed: true)
                                     try intoFile(path: path)
-                                    broadcast() { (eventHandler,textRange,dataRange) in
-                                        eventHandler.enterDataSource(data: data, entityName: entityText, url: url)
-                                    }
                                 }
                                 else {
                                     broadcast { (eventHandler,textRange,dataRange) in

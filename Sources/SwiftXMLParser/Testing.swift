@@ -83,21 +83,41 @@ public class XTestParsePrinter: XEventHandler {
     
     public var errors = [Error]()
     
-    public func enterDataSource(data: Data, entityName: String?, url: URL?) {
-        if let path = url?.path {
-            print("entering replacement text for external parsed entity: name \"\(entityName ?? "")\", path [\(path)]")
+    var textRangeOverride: XTextRange? = nil
+    var dataRangeOverride: XDataRange? = nil
+    
+    var interDataSourceLevel = 0
+    
+    public func enterInternalDataSource(data: Data, entityName: String, textRange: XTextRange?, dataRange: XDataRange?) {
+        if interDataSourceLevel == 0 {
+            textRangeOverride = textRange
+            dataRangeOverride = dataRange
         }
-        else {
-            print("entering replacement text for internal entity: name \"\(entityName ?? "")\"")
-        }
+        interDataSourceLevel += 1
+        print("entering replacement text for internal entity: name \"\(entityName)\"; \(textRangeOverride!) (\(dataRangeOverride!) in data)")
+        writeExcerpt(forTextRange: textRangeOverride!, forDataRange: dataRangeOverride!)
+    }
+    
+    public func enterExternalDataSource(data: Data, entityName: String?, url: URL?, textRange: XTextRange?, dataRange: XDataRange?) {
+        print("entering replacement text for external parsed entity: name \"\(entityName ?? "")\", path [\(url?.path ?? "")]; \(textRange!) (\(dataRange!) in data)")
+        writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
         sleepingLines.append(self.lines)
         sleepingDatas.append(self.data)
         self.data = data
         self.lines = linesFromData(data: self.data)
     }
     
-    public func leaveDataSource() {
-        print("leaving replacement text")
+    public func leaveInternalDataSource() {
+        print("leaving internal replacement text")
+        interDataSourceLevel -= 1
+        if interDataSourceLevel == 0 {
+            textRangeOverride = nil
+            dataRangeOverride = nil
+        }
+    }
+    
+    public func leaveExternalDataSource() {
+        print("leaving external replacement text")
         if let awakenedLines = sleepingLines.popLast(),
            let awakenedData = sleepingDatas.popLast() {
             lines = awakenedLines
@@ -149,13 +169,14 @@ public class XTestParsePrinter: XEventHandler {
         }
     }
     
-    func writeBinaryExcerpt(forDataRange XDataRange: XDataRange) {
-        writer.writeLine("  binary excerpt: {\(String(decoding: data.subdata(in: XDataRange.binaryStart..<XDataRange.binaryUntil), as: UTF8.self))}")
+    func writeBinaryExcerpt(forDataRange _dataRange: XDataRange) {
+        let dataRange = dataRangeOverride ?? _dataRange
+        writer.writeLine("  binary excerpt: {\(String(decoding: data.subdata(in: dataRange.binaryStart..<dataRange.binaryUntil), as: UTF8.self))}")
     }
     
-    func writeExcerpt(forTextRange XTextRange: XTextRange, forDataRange XDataRange: XDataRange) {
-        writeBinaryExcerpt(forDataRange: XDataRange)
-        writeTextExcerpt(forTextRange: XTextRange)
+    func writeExcerpt(forTextRange textRange: XTextRange, forDataRange dataRange: XDataRange) {
+        writeBinaryExcerpt(forDataRange: dataRangeOverride ?? dataRange)
+        writeTextExcerpt(forTextRange: textRangeOverride ?? textRange)
     }
     
     public func documentStart() {
@@ -192,7 +213,9 @@ public class XTestParsePrinter: XEventHandler {
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
     }
     
-    public func text(text: String, whitespace: WhitespaceIndicator, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func text(text: String, whitespace: WhitespaceIndicator, textRange _textRange: XTextRange?, dataRange _dataRange: XDataRange?) {
+        let textRange = textRangeOverride ?? _textRange
+        let dataRange = dataRangeOverride ?? _dataRange
         write("text: \"\(text.cited())\", whitespace indicator \(whitespace); \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
     }
