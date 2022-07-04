@@ -334,6 +334,15 @@ public class XParser: Parser {
                             try error(baseMessage)
                         }
                     }
+                    else if expectedUTF8Rest > 0 {
+                        let baseMessage = "external parsed entity has uncomplete UTF-8 codes at the end of file"
+                        if let currentExternalParsedEntityURL = currentExternalParsedEntityURLs.last {
+                            try error("\(baseMessage): \(currentExternalParsedEntityURL.path)")
+                        }
+                        else {
+                            try error(baseMessage)
+                        }
+                    }
                     else {
                         binaryPosition += 1
                         if !texts.isEmpty || binaryPosition > parsedBefore {
