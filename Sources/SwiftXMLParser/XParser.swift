@@ -270,7 +270,7 @@ public class XParser: Parser {
         enum DataSourceType { case internalSource; case externalSource }
         typealias SleepReasons = DataSourceType
         
-        var sleepingDatas = [(Data,Data.Iterator,ElementLevel,SleepReasons)]()
+        var sleepingDatas = [(Data,Data.Iterator,ElementLevel,State,State,SleepReasons)]()
         var data = _data
         var activeDataIterator = data.makeIterator()
         
@@ -320,7 +320,7 @@ public class XParser: Parser {
         }
         
         func startNewData(newData: Data, dataSourceType: DataSourceType) {
-            sleepingDatas.append((data,activeDataIterator,elementLevel,dataSourceType))
+            sleepingDatas.append((data,activeDataIterator,elementLevel,state,outerState,dataSourceType))
             data = newData
             activeDataIterator = data.makeIterator()
             newParsePosition()
@@ -332,9 +332,9 @@ public class XParser: Parser {
             
             var nextB = activeDataIterator.next()
             while nextB == nil {
-                if let (awakenedData,awakenedDataIterator,oldElementLevel,sleepReason) = sleepingDatas.popLast() {
-                    if !(state == .TEXT && outerState == .TEXT) {
-                        let baseMessage = "external parsed entity does not end in text mode"
+                if let (awakenedData,awakenedDataIterator,oldElementLevel,oldState,oldOuterState,sleepReason) = sleepingDatas.popLast() {
+                    if !(state == oldState && outerState == oldOuterState) {
+                        let baseMessage = "after inserting content for entity, pasing is in a different state"
                         if let currentExternalParsedEntityURL = currentExternalParsedEntityURLs.last {
                             try error("\(baseMessage): \(currentExternalParsedEntityURL.path)")
                         }
