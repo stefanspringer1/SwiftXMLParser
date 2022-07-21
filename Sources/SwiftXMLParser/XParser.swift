@@ -285,9 +285,9 @@ public class XParser: Parser {
                 mainStartLine: mainStartLine,
                 mainStartColumn: mainStartColumn,
                 line: line,
-                lastLine: lastLine,
+                lastLine: line,
                 column: column,
-                lastColumn: lastColumn,
+                lastColumn: column,
                 lastCodePoint: lastCodePoint,
                 lastLastCodePoint: lastLastCodePoint
             ))
@@ -367,6 +367,7 @@ public class XParser: Parser {
                             texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                         }
                     }
+                    restoreParsePosition()
                     switch sleepReason {
                     case .internalSource:  broadcast() { (eventHandler,textRange,dataRange) in eventHandler.leaveInternalDataSource() }
                     case .externalSource:  broadcast() { (eventHandler,textRange,dataRange) in eventHandler.leaveExternalDataSource() }
@@ -376,7 +377,6 @@ public class XParser: Parser {
                     if sleepReason == .externalSource {
                         _ = currentExternalParsedEntityURLs.popLast()
                     }
-                    restoreParsePosition()
                     nextB = activeDataIterator.next()
                 }
                 else {
@@ -913,7 +913,6 @@ public class XParser: Parser {
                                     
                                     parsedBefore = binaryPosition + 1
                                     state = .TEXT
-                                    setMainStart(delayed: true)
                                     startNewData(newData: newData, dataSourceType: .externalSource)
                                 }
                                 else {
