@@ -235,17 +235,18 @@ public class XParser: Parser {
         }
         
         @inline(__always) func broadcast(
+            parsedBefore: Int = mainParsedBefore, startLine: Int = mainStartLine, startColumn: Int = mainStartColumn,
             endLine: Int = line, endColumn: Int = column, binaryUntil: Int = binaryPosition + 1,
             processEventHandlers: (XEventHandler,XTextRange,XDataRange) -> ()
         ) {
             let xTextRange = XTextRange(
-                startLine: mainStartLine,
-                startColumn: mainStartColumn,
+                startLine: startLine,
+                startColumn: startColumn,
                 endLine: endLine,
                 endColumn: endColumn
             )
             let xDataRange = XDataRange(
-                binaryStart: mainParsedBefore,
+                binaryStart: parsedBefore,
                 binaryUntil: binaryUntil
             )
             broadcast(
@@ -362,19 +363,9 @@ public class XParser: Parser {
                     }
                     else {
                         binaryPosition += 1
-                        if !texts.isEmpty || binaryPosition > parsedBefore {
-                            broadcast(
-                                endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryPosition
-                            ) { (eventHandler,textRange,dataRange) in
-                                eventHandler.text(
-                                    text: (texts.joined() + (binaryPosition > parsedBefore ? String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self) : "")).replacingOccurrences(of: "\r\n", with: "\n"),
-                                    whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
-                                    textRange: textRange,
-                                    dataRange: dataRange
-                                )
-                            }
+                        if binaryPosition > parsedBefore {
+                            texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                         }
-                        texts.removeAll()
                     }
                     switch sleepReason {
                     case .internalSource:  broadcast() { (eventHandler,textRange,dataRange) in eventHandler.leaveInternalDataSource() }
@@ -534,7 +525,6 @@ public class XParser: Parser {
                             }
                             else {
                                 items.append(quotedParseResult(value: texts.joined()))
-                                texts.removeAll()
                             }
                             texts.removeAll()
                             quoteSign = 0
@@ -845,12 +835,11 @@ public class XParser: Parser {
                                             texts.removeAll()
                                             
                                         }
-                                        broadcast() { (eventHandler,textRange,dataRange) in
+                                        broadcast(parsedBefore: entityBinaryStart, startLine: entityStartLine, startColumn: entityStartColumn) { (eventHandler,textRange,dataRange) in
                                             eventHandler.enterInternalDataSource(data: autoResolutionData, entityName: entityText, textRange: textRange, dataRange: dataRange)
                                         }
                                         parsedBefore = binaryPosition + 1
                                         state = .TEXT
-                                        setMainStart(delayed: true)
                                         startNewData(newData: autoResolutionData, dataSourceType: .internalSource)
                                         continue binaryLoop
                                     }
