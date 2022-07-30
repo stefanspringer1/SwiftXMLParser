@@ -95,6 +95,8 @@ public class XParser: Parser {
     let internalEntityResolver: InternalEntityResolver?
     let textAllowedInElementWithName: ((String) -> Bool)?
     let insertExternalParsedEntities: Bool
+    let externalParsedEntitiesSystemResolver: ((String) -> URL?)?
+    let externalParsedEntitiesGetter: ((String) -> Data?)?
     let debugWriter: ((String) -> ())?
     
     public init(
@@ -102,12 +104,16 @@ public class XParser: Parser {
         internalEntityResolver: InternalEntityResolver? = nil,
         textAllowedInElementWithName: ((String) -> Bool)? = nil,
         insertExternalParsedEntities: Bool = true,
+        externalParsedEntitiesSystemResolver: ((String) -> URL?)? = nil,
+        externalParsedEntitiesGetter: ((String) -> Data?)? = nil,
         debugWriter: ((String) -> ())? = nil
     ) {
         self.internalEntityAutoResolve = internalEntityAutoResolve
         self.internalEntityResolver = internalEntityResolver
         self.textAllowedInElementWithName = textAllowedInElementWithName
         self.insertExternalParsedEntities = insertExternalParsedEntities
+        self.externalParsedEntitiesSystemResolver = externalParsedEntitiesSystemResolver
+        self.externalParsedEntitiesGetter = externalParsedEntitiesGetter
         self.debugWriter = debugWriter
     }
     
@@ -127,7 +133,9 @@ public class XParser: Parser {
             directoryURL = nil
         }
         
-        var currentExternalParsedEntityURLs = [URL]()
+        struct ExternalParsedEntityInfo { let systemID: String; let url: URL? }
+        
+        var currentExternalParsedEntityInfos = [ExternalParsedEntityInfo]()
         
         func error(_ message: String, negativeColumnOffset: Int = 0) throws {
             throw ParseError("\(sourceInfo != nil ? "\(sourceInfo ?? ""):" : "")\(line):\(column-negativeColumnOffset):E: \(message)")
@@ -213,7 +221,7 @@ public class XParser: Parser {
         
         var declaredEntityNames: Set<String> = []
         var internalEntityDatas = [String:Data]()
-        var externalParsedEntityPaths = [String:String]() // entity name -> path to file
+        var externalParsedEntitySystemIDs = [String:String]() // entity name -> path to file
         var declaredNotationNames: Set<String> = []
         var declaredElementNames: Set<String> = []
         var declaredAttributeListNames: Set<String> = []
@@ -336,8 +344,8 @@ public class XParser: Parser {
                 if let (awakenedData,awakenedDataIterator,oldElementLevel,oldState,oldOuterState,sleepReason) = sleepingDatas.popLast() {
                     if !(state == oldState && outerState == oldOuterState) {
                         let baseMessage = "after inserting content for entity, pasing is in a different state"
-                        if let currentExternalParsedEntityURL = currentExternalParsedEntityURLs.last {
-                            try error("\(baseMessage): \(currentExternalParsedEntityURL.path)")
+                        if let currentExternalParsedEntityInfo = currentExternalParsedEntityInfos.last {
+                            try error("\(baseMessage): \(currentExternalParsedEntityInfo.url?.path ?? currentExternalParsedEntityInfo.systemID)")
                         }
                         else {
                             try error(baseMessage)
@@ -345,8 +353,8 @@ public class XParser: Parser {
                     }
                     else if elementLevel != oldElementLevel {
                         let baseMessage = "external parsed entity does not return to same element level"
-                        if let currentExternalParsedEntityURL = currentExternalParsedEntityURLs.last {
-                            try error("\(baseMessage): \(currentExternalParsedEntityURL.path)")
+                        if let currentExternalParsedEntityInfo = currentExternalParsedEntityInfos.last {
+                            try error("\(baseMessage): \(currentExternalParsedEntityInfo.url?.path ?? currentExternalParsedEntityInfo.systemID)")
                         }
                         else {
                             try error(baseMessage)
@@ -354,8 +362,8 @@ public class XParser: Parser {
                     }
                     else if expectedUTF8Rest > 0 {
                         let baseMessage = "external parsed entity has uncomplete UTF-8 codes at the end of file"
-                        if let currentExternalParsedEntityURL = currentExternalParsedEntityURLs.last {
-                            try error("\(baseMessage): \(currentExternalParsedEntityURL.path)")
+                        if let currentExternalParsedEntityInfo = currentExternalParsedEntityInfos.last {
+                            try error("\(baseMessage): \(currentExternalParsedEntityInfo.url?.path ?? currentExternalParsedEntityInfo.systemID)")
                         }
                         else {
                             try error(baseMessage)
@@ -388,7 +396,7 @@ public class XParser: Parser {
                     data = awakenedData
                     activeDataIterator = awakenedDataIterator
                     if sleepReason == .externalSource {
-                        _ = currentExternalParsedEntityURLs.popLast()
+                        _ = currentExternalParsedEntityInfos.popLast()
                     }
                     nextB = activeDataIterator.next()
                 }
@@ -911,22 +919,34 @@ public class XParser: Parser {
                             mainStartLine = entityStartLine
                             mainStartColumn = entityStartColumn
                             if isExternal {
-                                if insertExternalParsedEntities, let externalParsedEntityPath = externalParsedEntityPaths[entityText],
-                                let theSourceURL = directoryURL {
-                                    
-                                    let url = theSourceURL.appendingPathComponent(externalParsedEntityPath)
-                                    currentExternalParsedEntityURLs.append(url)
-                                    let path = url.path
-                                    
-                                    let newData = try Data(contentsOf: URL(fileURLWithPath: path))
-                                    
-                                    broadcast() { (eventHandler,textRange,dataRange) in
-                                        eventHandler.enterExternalDataSource(data: newData, entityName: entityText, url: url, textRange: textRange, dataRange: dataRange)
+                                if insertExternalParsedEntities, let externalParsedEntitySystemID = externalParsedEntitySystemIDs[entityText] {
+                                    var url: URL? = nil
+                                    var newData: Data? = nil
+                                    if let externalParsedEntitiesSystemResolver = externalParsedEntitiesSystemResolver {
+                                        url = externalParsedEntitiesSystemResolver(externalParsedEntitySystemID)
                                     }
-                                    
+                                    if url == nil {
+                                        if let externalParsedEntitiesGetter = externalParsedEntitiesGetter {
+                                            newData = externalParsedEntitiesGetter(externalParsedEntitySystemID)
+                                        }
+                                        if newData == nil {
+                                            if let theSourceURL = directoryURL {
+                                                let theURL = theSourceURL.appendingPathComponent(externalParsedEntitySystemID)
+                                                url = theURL
+                                                newData = try Data(contentsOf: URL(fileURLWithPath: theURL.path))
+                                            }
+                                        }
+                                    }
+                                    guard let theNewData = newData else {
+                                        try error("could bo load external parsed entity data for system ID \"\(externalParsedEntitySystemID)\""); return
+                                    }
+                                    currentExternalParsedEntityInfos.append(ExternalParsedEntityInfo(systemID: externalParsedEntitySystemID, url: url))
+                                    broadcast() { (eventHandler,textRange,dataRange) in
+                                        eventHandler.enterExternalDataSource(data: theNewData, entityName: entityText, systemID: externalParsedEntitySystemID, url: url, textRange: textRange, dataRange: dataRange)
+                                    }
                                     parsedBefore = binaryPosition + 1
                                     state = .TEXT
-                                    startNewData(newData: newData, dataSourceType: .externalSource)
+                                    startNewData(newData: theNewData, dataSourceType: .externalSource)
                                 }
                                 else {
                                     broadcast { (eventHandler,textRange,dataRange) in
@@ -1311,7 +1331,7 @@ public class XParser: Parser {
                                                 if declaredEntityNames.contains(entityName) {
                                                     try error("entity with name \"\(entityName)\" declared more than once")
                                                 }
-                                                externalParsedEntityPaths[entityName] = systemValue
+                                                externalParsedEntitySystemIDs[entityName] = systemValue
                                                 broadcast { (eventHandler,textRange,dataRange) in
                                                     eventHandler.externalEntityDeclaration(
                                                         name: entityName,
@@ -1784,8 +1804,8 @@ public class XParser: Parser {
                         if correctPlacedInExternalEntity {
                             if let theEncoding = encoding, !["ascii", "us-ascii", "utf8", "utf-8"].contains(theEncoding.lowercased()) {
                                 let baseMessage = "uncorrect encoding \"\(theEncoding)\" noted via text declaration in external parsed entity"
-                                if let currentExternalParsedEntityURL = currentExternalParsedEntityURLs.last {
-                                    try error("\(baseMessage): \(currentExternalParsedEntityURL.path)")
+                                if let currentExternalParsedEntityInfo = currentExternalParsedEntityInfos.last {
+                                    try error("\(baseMessage): \(currentExternalParsedEntityInfo.url?.path ?? currentExternalParsedEntityInfo.systemID)")
                                 }
                                 else {
                                     try error(baseMessage)

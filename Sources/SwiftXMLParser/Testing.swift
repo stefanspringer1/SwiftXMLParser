@@ -107,7 +107,7 @@ public class XTestParsePrinter: XEventHandler {
         enterDataSourceCommon(data: data)
     }
     
-    public func enterExternalDataSource(data: Data, entityName: String?, url: URL?, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func enterExternalDataSource(data: Data, entityName: String?, systemID: String, url: URL?, textRange: XTextRange?, dataRange: XDataRange?) {
         print("entering replacement text for external parsed entity: name \"\(entityName ?? "")\", path [\(url?.path ?? "")]; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
         enterDataSourceCommon(data: data)
