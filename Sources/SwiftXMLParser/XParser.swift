@@ -95,8 +95,8 @@ public class XParser: Parser {
     let internalEntityResolver: InternalEntityResolver?
     let textAllowedInElementWithName: ((String) -> Bool)?
     let insertExternalParsedEntities: Bool
-    let externalParsedEntitiesSystemResolver: ((String) -> URL?)?
-    let externalParsedEntitiesGetter: ((String) -> Data?)?
+    let externalParsedEntitySystemResolver: ((String) -> URL?)?
+    let externalParsedEntityGetter: ((String) -> Data?)?
     let debugWriter: ((String) -> ())?
     
     public init(
@@ -104,16 +104,16 @@ public class XParser: Parser {
         internalEntityResolver: InternalEntityResolver? = nil,
         textAllowedInElementWithName: ((String) -> Bool)? = nil,
         insertExternalParsedEntities: Bool = true,
-        externalParsedEntitiesSystemResolver: ((String) -> URL?)? = nil,
-        externalParsedEntitiesGetter: ((String) -> Data?)? = nil,
+        externalParsedEntitySystemResolver: ((String) -> URL?)? = nil,
+        externalParsedEntityGetter: ((String) -> Data?)? = nil,
         debugWriter: ((String) -> ())? = nil
     ) {
         self.internalEntityAutoResolve = internalEntityAutoResolve
         self.internalEntityResolver = internalEntityResolver
         self.textAllowedInElementWithName = textAllowedInElementWithName
         self.insertExternalParsedEntities = insertExternalParsedEntities
-        self.externalParsedEntitiesSystemResolver = externalParsedEntitiesSystemResolver
-        self.externalParsedEntitiesGetter = externalParsedEntitiesGetter
+        self.externalParsedEntitySystemResolver = externalParsedEntitySystemResolver
+        self.externalParsedEntityGetter = externalParsedEntityGetter
         self.debugWriter = debugWriter
     }
     
@@ -922,12 +922,12 @@ public class XParser: Parser {
                                 if insertExternalParsedEntities, let externalParsedEntitySystemID = externalParsedEntitySystemIDs[entityText] {
                                     var url: URL? = nil
                                     var newData: Data? = nil
-                                    if let externalParsedEntitiesSystemResolver = externalParsedEntitiesSystemResolver {
-                                        url = externalParsedEntitiesSystemResolver(externalParsedEntitySystemID)
+                                    if let externalParsedEntitySystemResolver = externalParsedEntitySystemResolver {
+                                        url = externalParsedEntitySystemResolver(externalParsedEntitySystemID)
                                     }
                                     if url == nil {
-                                        if let externalParsedEntitiesGetter = externalParsedEntitiesGetter {
-                                            newData = externalParsedEntitiesGetter(externalParsedEntitySystemID)
+                                        if let externalParsedEntityGetter = externalParsedEntityGetter {
+                                            newData = externalParsedEntityGetter(externalParsedEntitySystemID)
                                         }
                                         if newData == nil {
                                             if let theSourceURL = directoryURL {
