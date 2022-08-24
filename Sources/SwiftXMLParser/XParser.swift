@@ -930,11 +930,9 @@ public class XParser: Parser {
                                             newData = externalParsedEntityGetter(externalParsedEntitySystemID)
                                         }
                                         if newData == nil {
-                                            print("-------> DIR [\(directoryURL?.path ?? "?")]")
                                             if let theSourceURL = directoryURL {
                                                 let theURL = theSourceURL.appendingPathComponent(externalParsedEntitySystemID)
                                                 url = theURL
-                                                print("-------> [\(theURL.path)]")
                                                 newData = try Data(contentsOf: URL(fileURLWithPath: theURL.path))
                                             }
                                         }
