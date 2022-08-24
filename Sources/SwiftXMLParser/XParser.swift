@@ -938,7 +938,7 @@ public class XParser: Parser {
                                         }
                                     }
                                     guard let theNewData = newData else {
-                                        try error("could bo load external parsed entity data for system ID \"\(externalParsedEntitySystemID)\""); return
+                                        try error("could not load external parsed entity data for system ID \"\(externalParsedEntitySystemID)\""); return
                                     }
                                     currentExternalParsedEntityInfos.append(ExternalParsedEntityInfo(systemID: externalParsedEntitySystemID, url: url))
                                     broadcast() { (eventHandler,textRange,dataRange) in
