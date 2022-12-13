@@ -14,7 +14,7 @@ This library is published under the Apache License 2.0, please feel free to use 
 
 ## Main Aspects of This Parser
 
-Entities that are not understood as external entities according to the internal subset of the document (they are then called "internal" entities here)can be replaced by the client. Internal entities in attribute values have to be replaced by the client, internal attributes in text might remain. This entity handling can be added by the client in form of a trailing closure to the parse call, receiving the entity name and the optional names of the element and the attribute, if the entity is from an attribute value.
+Entities that are not understood as external entities according to the internal subset of the document (they are then called "internal" entities here) can be replaced by the client. Internal entities in attribute values have to be replaced by the client, internal attributes in text might remain. This entity handling can be added by the client in form of a trailing closure to the parse call, receiving the entity name and the optional names of the element and the attribute, if the entity is from an attribute value.
 
 Besides entity handling, the client uses the parser by an instance of type "XMLEventHandler" defined in the (XMLInterfaces)[https://github.com/stefanspringer1/XMLInterfaces] repository.
 
