@@ -21,7 +21,7 @@ Besides entity handling, the client uses the parser by an instance of type "XMLE
 ## Some Limitations of This Parser
 
 - It only parses XML docmuments encoded in UTF-8.
-- It does not recognize XML namespaces.
+- It does not recognize XML namespaces. (Namespaces should be processed by a consumer of the parse events.)
 - It understands document type declaration and entity declarations, but does not do any validation against a DTD (or any other scheme) and does not read any external files.
 - It parses element declarations ("<!ELEMENT ... >") and attribute list declarations ("<!ATTLIST ... >") only in the form of its definition as text, it does not uses them for validation, and no enttites within them are replaced.
 
