@@ -488,11 +488,11 @@ public class XParser: Parser {
                 var ignore = false
                 
                 if ignoreNextLinebreak == 2 {
-                    if b == U_LINE_FEED {
+                    if codePoint == U_LINE_FEED {
                         ignoreNextLinebreak = 0
                         ignore = true
                     }
-                    else if b == U_CARRIAGE_RETURN {
+                    else if codePoint == U_CARRIAGE_RETURN {
                         ignoreNextLinebreak = 1
                         ignore = true
                     }
@@ -501,7 +501,7 @@ public class XParser: Parser {
                     }
                 }
                 else if ignoreNextLinebreak == 1 {
-                    if b == U_LINE_FEED {
+                    if codePoint == U_LINE_FEED {
                         ignoreNextLinebreak = 0
                         ignore = true
                     }
