@@ -464,6 +464,9 @@ public class XParser: Parser {
                     line += 1
                     column = 0
                 }
+                else if binaryPosition == 2 && codePoint == U_BOM {
+                    continue binaryLoop
+                }
                 
                 if let unicodeScalar = UnicodeScalar(codePoint) {
                     let unicodeScalarProperties = unicodeScalar.properties
@@ -605,20 +608,9 @@ public class XParser: Parser {
                         }
                     default:
                         if elementLevel == 0 && outerState == .TEXT {
-                            var whitespaceCheck = true
-                            switch binaryPosition {
-                            case 0: if b == U_BOM_1 { whitespaceCheck = false }
-                            case 1: if b == U_BOM_2 && lastCodePoint == U_BOM_1 { whitespaceCheck = false}
-                            case 2: if b == U_BOM_3 && lastCodePoint == U_BOM_2 && lastLastCodePoint == U_BOM_1 { whitespaceCheck = false }
-                            default: break
-                            }
-                            if whitespaceCheck {
-                                try error("non-whitespace \(characterCitation(codePoint)) outside elements")
-                            }
+                            try error("non-whitespace \(characterCitation(codePoint)) outside elements")
                         }
-                        else {
-                            isWhitespace = false
-                        }
+                        isWhitespace = false
                     }
                 /* 2 */
                 case .START_OR_EMPTY_TAG, .XML_DECLARATION:

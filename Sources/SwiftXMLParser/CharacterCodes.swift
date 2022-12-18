@@ -10,6 +10,8 @@ let U_BOM_1: Data.Element = 0xEF
 let U_BOM_2: Data.Element = 0xBB
 let U_BOM_3: Data.Element = 0xBF
 
+let U_BOM: UnicodeCodePoint = 0xFEFF
+
 typealias UnicodeCodePoint = UInt32
 
 let U_MAX_ASCII: UnicodeCodePoint = 0x7E
