@@ -14,16 +14,17 @@ This library is published under the Apache License 2.0, please feel free to use 
 
 ## Main Aspects of This Parser
 
-Entities that are not understood as external entities according to the internal subset of the document (they are then called "internal" entities here)can be replaced by the client. Internal entities in attribute values have to be replaced by the client, internal attributes in text might remain. This entity handling can be added by the client in form of a trailing closure to the parse call, receiving the entity name and the optional names of the element and the attribute, if the entity is from an attribute value.
+Entities that are not understood as external entities according to the internal subset of the document (they are then called "internal" entities here) can be replaced by the client. Internal entities in attribute values have to be replaced by the client, internal attributes in text might remain. This entity handling can be added by the client in form of a trailing closure to the parse call, receiving the entity name and the optional names of the element and the attribute, if the entity is from an attribute value.
 
 Besides entity handling, the client uses the parser by an instance of type "XMLEventHandler" defined in the (XMLInterfaces)[https://github.com/stefanspringer1/XMLInterfaces] repository.
 
 ## Some Limitations of This Parser
 
 - It only parses XML docmuments encoded in UTF-8.
-- It does not recognize XML namespaces.
-- It understands document type declaration and entity declarations, but does not do any validation against a DTD (or any other scheme) and does not read any external files.
-- It parses element declarations ("<!ELEMENT ... >") and attribute list declarations ("<!ATTLIST ... >") only in the form of its definition as text, it does not uses them for validation, and no enttites within them are replaced.
+- It does not recognize XML namespaces. (Namespaces should be processed by a consumer of the parse events.)
+- It understands document type declaration and entity declarations, but does not do any validation against a DTD (or any other scheme). Such a validation should be done by a consumer of the parse events, and such a consumer could then also be applied to an aleady built XML tree. Parsing and validation do not belong together.
+- The only external files that are read by the parser are external parsed entities (if configurated).
+- It parses element declarations ("\<!ELEMENT ... >") and attribute list declarations ("\<!ATTLIST ... >") only in the form of its definition as text, it does not uses them for validation, and no enttites within them are replaced.
 
 ## Documentation
 
