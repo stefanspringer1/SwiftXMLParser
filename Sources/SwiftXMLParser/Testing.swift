@@ -19,6 +19,19 @@ public class XTestPrinter: XTestWriter {
     public init() {}
 }
 
+public class LineCollector: XTestWriter {
+    
+    private var _lines = [String]()
+    
+    public func writeLine(_ text: String) {
+        _lines.append(text)
+    }
+    
+    public init() {}
+    
+    var lines: [String] { _lines }
+}
+
 public func xParseTest(forData data: Data, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) {
     do {
         try XParser(
@@ -31,7 +44,9 @@ public func xParseTest(forData data: Data, writer: XTestWriter = XTestPrinter(),
         ])
     }
     catch {
-        print("ERROR: \(error.localizedDescription)")
+        let message = "ERROR: \(error.localizedDescription)"
+        print(message)
+        writer.writeLine(message)
     }
 }
 
