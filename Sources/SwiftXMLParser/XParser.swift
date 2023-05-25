@@ -549,6 +549,7 @@ public class XParser: Parser {
                                 else if let theToken = token {
                                     attributes[theToken] = texts.joined()
                                     token = nil
+                                    equalSignAfterToken = false
                                 }
                             }
                             else {
@@ -711,6 +712,9 @@ public class XParser: Parser {
                                 tokenStart = -1
                             }
                             if token != nil {
+                                if equalSignAfterToken {
+                                    try error("multiple equal signs after token")
+                                }
                                 equalSignAfterToken = true
                             }
                             else {
