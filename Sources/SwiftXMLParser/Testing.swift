@@ -215,7 +215,7 @@ public class XTestParsePrinter: XEventHandler {
     
     public func elementStart(name: String, attributes: [String : String?]?, textRange: XTextRange?, dataRange: XDataRange?) {
         if let theAttributes = attributes {
-            write("start of element: name \"\(name.cited())\", attributes \(theAttributes.map{ "\"\($0)\": \"\($1?.cited() ?? "")\"" }.joined(separator: ", ")); \(textRange!) (\(dataRange!) in data)")
+            write("start of element: name \"\(name.cited())\", attributes \(theAttributes.sorted{ $0.0 < $1.0 }.map{ "\"\($0)\": \"\($1?.cited() ?? "")\"" }.joined(separator: ", ")); \(textRange!) (\(dataRange!) in data)")
         }
         else {
             write("start of element: name \"\(name.cited())\", no attributes; \(textRange!) (\(dataRange!) in data)")
