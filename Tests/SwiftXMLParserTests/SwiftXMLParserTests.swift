@@ -17,6 +17,23 @@ final class SwiftXMLParserTests: XCTestCase {
         xParseTest(forData: [U_BOM_1, U_BOM_2, U_BOM_3] + "<a/>".data(using: .utf8)!)
     }
     
+    func testTextAllowedInElementWithName() throws {
+        let source = """
+                    <div class="tr--p annotate">Hallo <b>Welt!</b></div>
+                    """
+        let parser = XParser(
+            textAllowedInElementWithName: {
+                [
+                   "p",
+                   "b",
+                   "div"
+                   // ...
+               ].contains($0)
+            }
+        )
+        try parser.parse(fromData: source.data(using: .utf8)!, eventHandlers: [])
+    }
+    
     func testTwoEqualSignsForAttribute() {
         let lineCollector = LineCollector()
         
