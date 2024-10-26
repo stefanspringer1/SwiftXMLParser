@@ -97,6 +97,7 @@ public class XParser: Parser {
     
     let internalEntityAutoResolve: Bool
     let internalEntityResolver: InternalEntityResolver?
+    let internalEntityResolverHasToResolve: Bool
     let textAllowedInElementWithName: ((String) -> Bool)?
     let insertExternalParsedEntities: Bool
     let externalParsedEntitySystemResolver: ((String) -> URL?)?
@@ -106,6 +107,7 @@ public class XParser: Parser {
     public init(
         internalEntityAutoResolve: Bool = false,
         internalEntityResolver: InternalEntityResolver? = nil,
+        internalEntityResolverHasToResolve: Bool = true,
         textAllowedInElementWithName: ((String) -> Bool)? = nil,
         insertExternalParsedEntities: Bool = true,
         externalParsedEntitySystemResolver: ((String) -> URL?)? = nil,
@@ -114,6 +116,7 @@ public class XParser: Parser {
     ) {
         self.internalEntityAutoResolve = internalEntityAutoResolve
         self.internalEntityResolver = internalEntityResolver
+        self.internalEntityResolverHasToResolve = internalEntityResolverHasToResolve
         self.textAllowedInElementWithName = textAllowedInElementWithName
         self.insertExternalParsedEntities = insertExternalParsedEntities
         self.externalParsedEntitySystemResolver = externalParsedEntitySystemResolver
@@ -874,6 +877,9 @@ public class XParser: Parser {
                                             }
                                         }
                                         resolution = theInternalEntityResolver.resolve(entityWithName: entityText, forAttributeWithName: token, atElementWithName: name)
+                                        if resolution == nil, internalEntityResolverHasToResolve {
+                                            try error("internal entity resolver cannot resolve entity \"\(entityText)\"")
+                                        }
                                     }
                                 }
                             }
