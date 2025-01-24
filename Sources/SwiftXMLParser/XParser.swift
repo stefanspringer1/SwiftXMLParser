@@ -861,7 +861,7 @@ public class XParser: Parser {
                             }
                         }
                         if let resolution {
-                            if parseResolution {
+                            if parseResolution, resolution.contains("&") || resolution.contains("<") {
                                 let data = resolution.data(using: .utf8)
                                 if data == nil {
                                     try error("no utf-8 data for \"\(formatNonWhitespace(resolution))\"")
