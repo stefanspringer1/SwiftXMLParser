@@ -32,11 +32,11 @@ public class LineCollector: XTestWriter {
     var lines: [String] { _lines }
 }
 
-public func xParseTest(forData data: Data, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) {
+public func xParseTest(forData data: Data, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) {
     do {
         try XParser(
             internalEntityAutoResolve: true,
-            internalEntityResolver: XSimpleInternalEntityResolver(entityInAttributeTriggersError: false),
+            internalEntityResolver: internalEntityResolver ?? XSimpleInternalEntityResolver(entityInAttributeTriggersError: false),
             debugWriter: fullDebugOutput ? { writer.writeLine($0) } : nil
         )
         .parse(fromData: data, sourceInfo: sourceInfo, eventHandlers: [
@@ -50,16 +50,16 @@ public func xParseTest(forData data: Data, writer: XTestWriter = XTestPrinter(),
     }
 }
 
-public func xParseTest(forText text: String, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) {
-    xParseTest(forData: text.data(using: .utf8)!, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
+public func xParseTest(forText text: String, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) {
+    xParseTest(forData: text.data(using: .utf8)!, internalEntityResolver: internalEntityResolver, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
 }
 
-public func xParseTest(forURL url: URL, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) throws {
-    xParseTest(forData: try Data(contentsOf: url), writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
+public func xParseTest(forURL url: URL, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) throws {
+    xParseTest(forData: try Data(contentsOf: url), internalEntityResolver: internalEntityResolver, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
 }
 
-public func xParseTest(forPath path: String, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) throws {
-    xParseTest(forData: try Data(contentsOf: URL(fileURLWithPath: path)), writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
+public func xParseTest(forPath path: String, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) throws {
+    xParseTest(forData: try Data(contentsOf: URL(fileURLWithPath: path)), internalEntityResolver: internalEntityResolver, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
 }
 
 public protocol XTestWriter {
@@ -101,9 +101,12 @@ public class XTestParsePrinter: XEventHandler {
     
     public var errors = [Error]()
     
-    var interDataSourceLevel = 0
-    
-    func enterDataSourceCommon(data: Data) {
+    func enterDataSourceCommon(data: Data, textRange: XTextRange?, dataRange: XDataRange?) {
+        if dataSourceLevel == 0 {
+            originalTextRange = textRange
+            originalDataRange = dataRange
+        }
+        dataSourceLevel += 1
         sleepingLines.append(self.lines)
         sleepingDatas.append(self.data)
         self.data = data
@@ -116,19 +119,28 @@ public class XTestParsePrinter: XEventHandler {
             lines = awakenedLines
             data = awakenedData
         }
+        dataSourceLevel -= 1
+        if dataSourceLevel == 0 {
+            originalTextRange = nil
+            originalDataRange = nil
+        }
     }
+    
+    var dataSourceLevel = 0
+    var originalTextRange: XTextRange? = nil
+    var originalDataRange: XDataRange? = nil
     
     public func enterInternalDataSource(data: Data, entityName: String, textRange: XTextRange?, dataRange: XDataRange?) {
         print("entering replacement text for internal entity: name \"\(entityName)\"; \(textRange!) (\(dataRange!) in data)")
-        writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!, toStandardOut: true)
         print("  internal entity value: {\(String(data: data, encoding: String.Encoding.utf8)!)}")
-        enterDataSourceCommon(data: data)
+        enterDataSourceCommon(data: data, textRange: textRange, dataRange: dataRange)
     }
     
     public func enterExternalDataSource(data: Data, entityName: String?, systemID: String, url: URL?, textRange: XTextRange?, dataRange: XDataRange?) {
         print("entering replacement text for external parsed entity: name \"\(entityName ?? "")\", path [\(url?.path ?? "")]; \(textRange!) (\(dataRange!) in data)")
-        writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
-        enterDataSourceCommon(data: data)
+        writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!, toStandardOut: true)
+        enterDataSourceCommon(data: data, textRange: textRange, dataRange: dataRange)
     }
     
     public func leaveInternalDataSource() {
@@ -154,7 +166,8 @@ public class XTestParsePrinter: XEventHandler {
     func fakeThrow(error: Error) {
         errors.append(error)
     }
-    func writeTextExcerpt(forTextRange XTextRange: XTextRange) {
+    
+    func textExcerpt(forTextRange XTextRange: XTextRange, in lines: [String]) -> String {
         
         func correctedRightIndex(_ _rightIndex: Int?, count: Int, hasNextLine: Bool) -> Int {
             var rightIndex = _rightIndex
@@ -172,26 +185,33 @@ public class XTestParsePrinter: XEventHandler {
             else {
                 let line = lines[technicalLineNumber]
                 do {
-                    let subLine = try line.substring(with:
+                    return try line.substring(with:
                         (lineNo == XTextRange.startLine ? XTextRange.startColumn-1 : 0)..<(
                             correctedRightIndex(lineNo == XTextRange.endLine ? XTextRange.endColumn : nil, count: lines[technicalLineNumber].count, hasNextLine: technicalLineNumber + 1 < lines.count))
                         )
-                    writer.writeLine("  line excerpt:   {\(subLine)}")
                 }
                 catch {
                     fakeThrow(error: ParseExceptions.unknown("PARSER BUG: \(error.localizedDescription)"))
                 }
             }
         }
+        return ""
     }
     
-    func writeBinaryExcerpt(forDataRange dataRange: XDataRange) {
-        writer.writeLine("  binary excerpt: {\(String(decoding: data.subdata(in: dataRange.binaryStart..<dataRange.binaryUntil), as: UTF8.self))}")
+    func binaryExcerpt(forDataRange dataRange: XDataRange, in data: Data) -> String {
+        String(decoding: data.subdata(in: dataRange.binaryStart..<dataRange.binaryUntil), as: UTF8.self)
     }
     
-    func writeExcerpt(forTextRange textRange: XTextRange, forDataRange dataRange: XDataRange) {
-        writeBinaryExcerpt(forDataRange: dataRange)
-        writeTextExcerpt(forTextRange: textRange)
+    func writeExcerpt(forTextRange textRange: XTextRange, forDataRange dataRange: XDataRange, toStandardOut: Bool = false) {
+        let info = """
+              in current source:  from data: {\(binaryExcerpt(forDataRange: dataRange, in: data))}, from lines: {\(textExcerpt(forTextRange: textRange, in: lines))}
+              in original source: from data: {\(binaryExcerpt(forDataRange: originalDataRange ?? dataRange, in: sleepingDatas.first ?? data))}, from lines: {\(textExcerpt(forTextRange: originalTextRange ?? textRange, in: sleepingLines.first ?? lines))}
+            """
+        if toStandardOut {
+            print(info)
+        } else {
+            writer.writeLine(info)
+        }
     }
     
     public func documentStart() {
