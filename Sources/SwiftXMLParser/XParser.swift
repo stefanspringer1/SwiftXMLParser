@@ -597,7 +597,7 @@ public class XParser: Parser {
                             parsedBefore = binaryPosition + 1
                         }
                         else {
-                            //isWhitespace = false
+                            isWhitespace = false
                         }
                     case U_AMPERSAND:
                         if binaryPosition > parsedBefore {
@@ -616,6 +616,7 @@ public class XParser: Parser {
                                 texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                             }
                             try makeText()
+                            isWhitespace = true
                             state = .JUST_STARTED_WITH_LESS_THAN_SIGN
                             parsedBefore = binaryPosition + 1
                             setMainStart()
@@ -627,7 +628,7 @@ public class XParser: Parser {
                         if elementLevel == 0 && outerState == .TEXT {
                             try error("non-whitespace \(characterCitation(codePoint)) outside elements")
                         }
-                        //isWhitespace = false
+                        isWhitespace = false
                     }
                 /* 2 */
                 case .START_OR_EMPTY_TAG, .XML_DECLARATION:
@@ -894,7 +895,7 @@ public class XParser: Parser {
                                 texts.append(resolution)
                                 whitespaceTest: for c in resolution {
                                     if !(c == C_SPACE || c == C_LINE_FEED || c == C_CARRIAGE_RETURN || c == C_CHARACTER_TABULATION) {
-                                        //isWhitespace = false
+                                        isWhitespace = false
                                         break whitespaceTest
                                     }
                                 }
