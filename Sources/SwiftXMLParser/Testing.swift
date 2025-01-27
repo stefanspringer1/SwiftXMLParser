@@ -32,16 +32,21 @@ public class LineCollector: XTestWriter {
     var lines: [String] { _lines }
 }
 
-public func xParseTest(forData data: Data, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) {
+public func xParseTest(forData data: Data, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false, immediateTextHandlingNearEntities: ImmediateTextHandlingNearEntities = .atExternalEntities) {
     do {
         try XParser(
             internalEntityAutoResolve: true,
             internalEntityResolver: internalEntityResolver ?? XSimpleInternalEntityResolver(entityInAttributeTriggersError: false),
             debugWriter: fullDebugOutput ? { writer.writeLine($0) } : nil
         )
-        .parse(fromData: data, sourceInfo: sourceInfo, eventHandlers: [
-            XTestParsePrinter(data: data, writer: writer)
-        ])
+        .parse(
+            fromData: data,
+            sourceInfo: sourceInfo,
+            eventHandlers: [
+                XTestParsePrinter(data: data, writer: writer)
+            ],
+            immediateTextHandlingNearEntities: immediateTextHandlingNearEntities
+        )
     }
     catch {
         let message = "ERROR: \(error.localizedDescription)"
@@ -50,16 +55,16 @@ public func xParseTest(forData data: Data, internalEntityResolver: InternalEntit
     }
 }
 
-public func xParseTest(forText text: String, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) {
-    xParseTest(forData: text.data(using: .utf8)!, internalEntityResolver: internalEntityResolver, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
+public func xParseTest(forText text: String, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false, immediateTextHandlingNearEntities: ImmediateTextHandlingNearEntities = .atExternalEntities) {
+    xParseTest(forData: text.data(using: .utf8)!, internalEntityResolver: internalEntityResolver, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput, immediateTextHandlingNearEntities: immediateTextHandlingNearEntities)
 }
 
-public func xParseTest(forURL url: URL, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) throws {
-    xParseTest(forData: try Data(contentsOf: url), internalEntityResolver: internalEntityResolver, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
+public func xParseTest(forURL url: URL, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false, immediateTextHandlingNearEntities: ImmediateTextHandlingNearEntities = .atExternalEntities) throws {
+    xParseTest(forData: try Data(contentsOf: url), internalEntityResolver: internalEntityResolver, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput, immediateTextHandlingNearEntities: immediateTextHandlingNearEntities)
 }
 
-public func xParseTest(forPath path: String, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false) throws {
-    xParseTest(forData: try Data(contentsOf: URL(fileURLWithPath: path)), internalEntityResolver: internalEntityResolver, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput)
+public func xParseTest(forPath path: String, internalEntityResolver: InternalEntityResolver? = nil, writer: XTestWriter = XTestPrinter(), sourceInfo: String? = nil, fullDebugOutput: Bool = false, immediateTextHandlingNearEntities: ImmediateTextHandlingNearEntities = .atExternalEntities) throws {
+    xParseTest(forData: try Data(contentsOf: URL(fileURLWithPath: path)), internalEntityResolver: internalEntityResolver, writer: writer, sourceInfo: sourceInfo, fullDebugOutput: fullDebugOutput, immediateTextHandlingNearEntities: immediateTextHandlingNearEntities)
 }
 
 public protocol XTestWriter {
@@ -130,14 +135,14 @@ public class XTestParsePrinter: XEventHandler {
     var originalTextRange: XTextRange? = nil
     var originalDataRange: XDataRange? = nil
     
-    public func enterInternalDataSource(data: Data, entityName: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func enterInternalDataSource(data: Data, entityName: String, textRange: SwiftXMLInterfaces.XTextRange?, dataRange: SwiftXMLInterfaces.XDataRange?) {
         print("entering replacement text for internal entity: name \"\(entityName)\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!, toStandardOut: true)
         print("  internal entity value: {\(String(data: data, encoding: String.Encoding.utf8)!)}")
         enterDataSourceCommon(data: data, textRange: textRange, dataRange: dataRange)
     }
     
-    public func enterExternalDataSource(data: Data, entityName: String?, systemID: String, url: URL?, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func enterExternalDataSource(data: Data, entityName: String?, systemID: String, url: URL?, textRange: SwiftXMLInterfaces.XTextRange?, dataRange: SwiftXMLInterfaces.XDataRange?) {
         print("entering replacement text for external parsed entity: name \"\(entityName ?? "")\", path [\(url?.path ?? "")]; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!, toStandardOut: true)
         enterDataSourceCommon(data: data, textRange: textRange, dataRange: dataRange)

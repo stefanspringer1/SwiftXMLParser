@@ -178,38 +178,84 @@ final class SwiftXMLParserTests: XCTestCase {
             
             public func resolve(entityWithName entityName: String, forAttributeWithName attributeName: String?, atElementWithName elementName: String?) -> String? {
                 switch entityName {
-                case "test1": "&amp; &test2; <b/>"
-                case "test2": "so"
+                case "test1": "Hello &amp; &test2; <b/>"
+                case "test2": "&lt; so"
                 default: nil
                 }
             }
             
         }
         
-        let lineCollector = LineCollector()
-        
-        xParseTest(forText: """
+        let source = #"""
         <a>&test1;</a>
-        """, internalEntityResolver: EntityResolver(), writer: lineCollector)
+        """#
         
-        XCTAssertEqual(lineCollector.lines.joined(separator: "\n"), #"""
-        document started
-        start of element: name "a", no attributes; 1:1 - 1:3 (0..<3 in data)
-          in current source:  from data: {<a>}, from lines: {<a>}
-          in original source: from data: {<a>}, from lines: {<a>}
-        text: "& so ", whitespace indicator NOT_WHITESPACE; 1:1 - 1:14 (0..<14 in data)
-          in current source:  from data: {&amp; &test2; }, from lines: {&amp; &test2; }
-          in original source: from data: {&test1;}, from lines: {&test1;}
-        start of element: name "b", no attributes; 1:15 - 1:18 (14..<18 in data)
-          in current source:  from data: {<b/>}, from lines: {<b/>}
-          in original source: from data: {&test1;}, from lines: {&test1;}
-        end of element: name "b"; 1:15 - 1:18 (14..<18 in data)
-          in current source:  from data: {<b/>}, from lines: {<b/>}
-          in original source: from data: {&test1;}, from lines: {&test1;}
-        end of element: name "a"; 1:11 - 1:14 (10..<14 in data)
-          in current source:  from data: {</a>}, from lines: {</a>}
-          in original source: from data: {</a>}, from lines: {</a>}
-        document ended
-        """#)
+        do {
+            let lineCollector = LineCollector()
+            
+            xParseTest(
+                forText: source,
+                internalEntityResolver: EntityResolver(),
+                writer: lineCollector,
+                immediateTextHandlingNearEntities: .atExternalEntities // the default
+            )
+            
+            XCTAssertEqual(lineCollector.lines.joined(separator: "\n"), #"""
+                document started
+                start of element: name "a", no attributes; 1:1 - 1:3 (0..<3 in data)
+                  in current source:  from data: {<a>}, from lines: {<a>}
+                  in original source: from data: {<a>}, from lines: {<a>}
+                text: "Hello & < so ", whitespace indicator NOT_WHITESPACE; 1:1 - 1:20 (0..<20 in data)
+                  in current source:  from data: {Hello &amp; &test2; }, from lines: {Hello &amp; &test2; }
+                  in original source: from data: {&test1;}, from lines: {&test1;}
+                start of element: name "b", no attributes; 1:21 - 1:24 (20..<24 in data)
+                  in current source:  from data: {<b/>}, from lines: {<b/>}
+                  in original source: from data: {&test1;}, from lines: {&test1;}
+                end of element: name "b"; 1:21 - 1:24 (20..<24 in data)
+                  in current source:  from data: {<b/>}, from lines: {<b/>}
+                  in original source: from data: {&test1;}, from lines: {&test1;}
+                end of element: name "a"; 1:11 - 1:14 (10..<14 in data)
+                  in current source:  from data: {</a>}, from lines: {</a>}
+                  in original source: from data: {</a>}, from lines: {</a>}
+                document ended
+                """#)
+        }
+        
+        do {
+            let lineCollector = LineCollector()
+            
+            xParseTest(
+                forText: source,
+                internalEntityResolver: EntityResolver(),
+                writer: lineCollector,
+                immediateTextHandlingNearEntities: .always
+            )
+            
+            XCTAssertEqual(lineCollector.lines.joined(separator: "\n"), #"""
+                document started
+                start of element: name "a", no attributes; 1:1 - 1:3 (0..<3 in data)
+                  in current source:  from data: {<a>}, from lines: {<a>}
+                  in original source: from data: {<a>}, from lines: {<a>}
+                text: "Hello & ", whitespace indicator NOT_WHITESPACE; 1:1 - 1:18 (0..<12 in data)
+                  in current source:  from data: {Hello &amp; }, from lines: {Hello &amp; &test2}
+                  in original source: from data: {&test1;}, from lines: {&test1;}
+                text: "< so", whitespace indicator NOT_WHITESPACE; 1:1 - 1:7 (0..<7 in data)
+                  in current source:  from data: {&lt; so}, from lines: {&lt; so}
+                  in original source: from data: {&test1;}, from lines: {&test1;}
+                text: " ", whitespace indicator NOT_WHITESPACE; 1:1 - 1:20 (0..<20 in data)
+                  in current source:  from data: {Hello &amp; &test2; }, from lines: {Hello &amp; &test2; }
+                  in original source: from data: {&test1;}, from lines: {&test1;}
+                start of element: name "b", no attributes; 1:21 - 1:24 (20..<24 in data)
+                  in current source:  from data: {<b/>}, from lines: {<b/>}
+                  in original source: from data: {&test1;}, from lines: {&test1;}
+                end of element: name "b"; 1:21 - 1:24 (20..<24 in data)
+                  in current source:  from data: {<b/>}, from lines: {<b/>}
+                  in original source: from data: {&test1;}, from lines: {&test1;}
+                end of element: name "a"; 1:11 - 1:14 (10..<14 in data)
+                  in current source:  from data: {</a>}, from lines: {</a>}
+                  in original source: from data: {</a>}, from lines: {</a>}
+                document ended
+                """#)
+        }
     }
 }

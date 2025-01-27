@@ -127,8 +127,10 @@ public class XParser: Parser {
     public func parse(
         fromData _data: Data,
         sourceInfo: String? = nil,
-        eventHandlers: [XEventHandler]
+        eventHandlers: [XEventHandler],
+        immediateTextHandlingNearEntities: ImmediateTextHandlingNearEntities = .never
     ) throws {
+        
         var line = 1; var lastLine = 1
         var column = 0; var lastColumn = 1
         
@@ -227,7 +229,7 @@ public class XParser: Parser {
         var expectedUTF8Rest = 0
         
         var declaredEntityNames: Set<String> = []
-        var internalEntityDatas = [String:Data]()
+        var internalEntityResolutions = [String:String]()
         var externalParsedEntitySystemIDs = [String:String]() // entity name -> path to file
         var declaredNotationNames: Set<String> = []
         var declaredElementNames: Set<String> = []
@@ -241,11 +243,11 @@ public class XParser: Parser {
         }
         
         @inline(__always) func broadcast(
-            xTextRange: XTextRange, xDataRange: XDataRange,
-            processEventHandlers: (XEventHandler,XTextRange,XDataRange) -> ()
+            textRange: XTextRange, dataRange: XDataRange,
+            processEventHandler: (XEventHandler,XTextRange,XDataRange) -> ()
         ) {
-            eventHandlers.forEach { eventHandler in
-                processEventHandlers(eventHandler,xTextRange,xDataRange)
+            for eventHandler in eventHandlers {
+                processEventHandler(eventHandler,textRange,dataRange)
             }
         }
         
@@ -254,23 +256,21 @@ public class XParser: Parser {
         @inline(__always) func broadcast(
             parsedBefore: Int = mainParsedBefore, startLine: Int = mainStartLine, startColumn: Int = mainStartColumn,
             endLine: Int = line, endColumn: Int = column, binaryUntil: Int = binaryPosition + 1,
-            processEventHandlers: (XEventHandler,XTextRange,XDataRange) -> ()
+            processEventHandler: (XEventHandler,XTextRange,XDataRange) -> ()
         ) {
-            let xTextRange: XTextRange
-            let xDataRange: XDataRange
-            xTextRange = XTextRange(
+            let textRange = XTextRange(
                 startLine: startLine,
                 startColumn: startColumn,
                 endLine: endLine,
                 endColumn: endColumn
             )
-            xDataRange = XDataRange(
+            let dataRange = XDataRange(
                 binaryStart: parsedBefore,
                 binaryUntil: binaryUntil
             )
             broadcast(
-                xTextRange: xTextRange, xDataRange: xDataRange,
-                processEventHandlers: processEventHandlers
+                textRange: textRange, dataRange: dataRange,
+                processEventHandler: processEventHandler
             )
         }
         
@@ -337,14 +337,14 @@ public class XParser: Parser {
             }
         }
         
-        func startNewData(newData: Data, dataSourceType: DataSourceType) {
+        func startNewData(newData: Data, dataSourceType: DataSourceType) throws {
             sleepingDatas.append((data,activeDataIterator,elementLevel,state,outerState,dataSourceType))
             data = newData
             activeDataIterator = data.makeIterator()
             newParsePosition()
         }
         
-        func makeText() throws {
+        func makeText(parsedBefore: Int = mainParsedBefore, binaryUntil: Int = binaryPosition) throws {
             if !texts.isEmpty {
                if elementLevel > 0 {
                     if textAllowedInElementWithName?(ancestors.peek()!) == false {
@@ -355,7 +355,7 @@ public class XParser: Parser {
                     else {
                         let text = texts.joined().replacingOccurrences(of: "\r\n", with: "\n")
                         broadcast(
-                            endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryPosition
+                            parsedBefore: parsedBefore, endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryUntil
                         ) { (eventHandler,textRange,dataRange) in
                             eventHandler.text(
                                 text: text,
@@ -366,6 +366,7 @@ public class XParser: Parser {
                         }
                     }
                 }
+                isWhitespace = true
                 texts.removeAll()
             }
         }
@@ -410,14 +411,26 @@ public class XParser: Parser {
                             texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                         }
                     }
-                    restoreParsePosition()
                     if state != .TEXT {
                         try error("data source does not end in textual content")
                     }
-                    try makeText()
                     switch sleepReason {
-                    case .internalSource:  broadcast() { (eventHandler,textRange,dataRange) in eventHandler.leaveInternalDataSource() }
-                    case .externalSource:  broadcast() { (eventHandler,textRange,dataRange) in eventHandler.leaveExternalDataSource() }
+                    case .internalSource:
+                        if immediateTextHandlingNearEntities == .always || immediateTextHandlingNearEntities == .atInternalEntities {
+                            try makeText()
+                        }
+                        restoreParsePosition()
+                        broadcast { (eventHandler,textRange,dataRange) in
+                            eventHandler.leaveInternalDataSource()
+                        }
+                    case .externalSource:
+                        if immediateTextHandlingNearEntities == .always || immediateTextHandlingNearEntities == .atExternalEntities {
+                            try makeText(); parsedBefore = entityBinaryStart
+                        }
+                        restoreParsePosition()
+                        broadcast { (eventHandler,textRange,dataRange) in
+                            eventHandler.leaveExternalDataSource()
+                        }
                     }
                     data = awakenedData
                     activeDataIterator = awakenedDataIterator
@@ -584,7 +597,7 @@ public class XParser: Parser {
                             parsedBefore = binaryPosition + 1
                         }
                         else {
-                            isWhitespace = false
+                            //isWhitespace = false
                         }
                     case U_AMPERSAND:
                         if binaryPosition > parsedBefore {
@@ -603,7 +616,6 @@ public class XParser: Parser {
                                 texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                             }
                             try makeText()
-                            isWhitespace = true
                             state = .JUST_STARTED_WITH_LESS_THAN_SIGN
                             parsedBefore = binaryPosition + 1
                             setMainStart()
@@ -615,7 +627,7 @@ public class XParser: Parser {
                         if elementLevel == 0 && outerState == .TEXT {
                             try error("non-whitespace \(characterCitation(codePoint)) outside elements")
                         }
-                        isWhitespace = false
+                        //isWhitespace = false
                     }
                 /* 2 */
                 case .START_OR_EMPTY_TAG, .XML_DECLARATION:
@@ -842,14 +854,8 @@ public class XParser: Parser {
                             else {
                                 isExternal = externalEntityNames.contains(entityText)
                                 if !isExternal {
-                                    if internalEntityAutoResolve, let autoResolutionData = internalEntityDatas[entityText] {
-                                        broadcast(parsedBefore: entityBinaryStart, startLine: entityStartLine, startColumn: entityStartColumn) { (eventHandler,textRange,dataRange) in
-                                            eventHandler.enterInternalDataSource(data: autoResolutionData, entityName: entityText, textRange: textRange, dataRange: dataRange)
-                                        }
-                                        parsedBefore = binaryPosition + 1
-                                        state = .TEXT
-                                        startNewData(newData: autoResolutionData, dataSourceType: .internalSource)
-                                        continue binaryLoop
+                                    if internalEntityAutoResolve, let autoResolution = internalEntityResolutions[entityText] {
+                                        resolution = autoResolution
                                     }
                                     else if let theInternalEntityResolver = internalEntityResolver {
                                         if outerState == .START_OR_EMPTY_TAG {
@@ -870,22 +876,25 @@ public class XParser: Parser {
                         }
                         if let resolution {
                             if parseResolution, resolution.contains("&") || resolution.contains("<") {
-                                let data = resolution.data(using: .utf8)
-                                if data == nil {
+                                let resolutionData = resolution.data(using: .utf8)
+                                if resolutionData == nil {
                                     try error("no utf-8 data for \"\(formatNonWhitespace(resolution))\"")
                                 }
+                                if immediateTextHandlingNearEntities == .always || immediateTextHandlingNearEntities == .atInternalEntities {
+                                    try makeText(binaryUntil: entityBinaryStart)
+                                }
                                 broadcast(parsedBefore: entityBinaryStart, startLine: entityStartLine, startColumn: entityStartColumn) { (eventHandler,textRange,dataRange) in
-                                    eventHandler.enterInternalDataSource(data: data!, entityName: entityText, textRange: textRange, dataRange: dataRange)
+                                    eventHandler.enterInternalDataSource(data: resolutionData!, entityName: entityText, textRange: textRange, dataRange: dataRange)
                                 }
                                 parsedBefore = binaryPosition + 1
                                 state = .TEXT
-                                startNewData(newData: data!, dataSourceType: .internalSource)
+                                try startNewData(newData: resolutionData!, dataSourceType: .internalSource)
                                 continue binaryLoop
                             } else {
                                 texts.append(resolution)
                                 whitespaceTest: for c in resolution {
                                     if !(c == C_SPACE || c == C_LINE_FEED || c == C_CARRIAGE_RETURN || c == C_CHARACTER_TABULATION) {
-                                        isWhitespace = false
+                                        //isWhitespace = false
                                         break whitespaceTest
                                     }
                                 }
@@ -945,12 +954,15 @@ public class XParser: Parser {
                                         try error("could not load external parsed entity data for system ID \"\(externalParsedEntitySystemID)\""); return
                                     }
                                     currentExternalParsedEntityInfos.append(ExternalParsedEntityInfo(systemID: externalParsedEntitySystemID, url: url))
-                                    broadcast() { (eventHandler,textRange,dataRange) in
+                                    if immediateTextHandlingNearEntities == .always || immediateTextHandlingNearEntities == .atInternalEntities {
+                                        try makeText()
+                                    }
+                                    broadcast(parsedBefore: entityBinaryStart, startLine: entityStartLine, startColumn: entityStartColumn) { (eventHandler,textRange,dataRange) in
                                         eventHandler.enterExternalDataSource(data: theNewData, entityName: entityText, systemID: externalParsedEntitySystemID, url: url, textRange: textRange, dataRange: dataRange)
                                     }
                                     parsedBefore = binaryPosition + 1
                                     state = .TEXT
-                                    startNewData(newData: theNewData, dataSourceType: .externalSource)
+                                    try startNewData(newData: theNewData, dataSourceType: .externalSource)
                                 }
                                 else {
                                     broadcast { (eventHandler,textRange,dataRange) in
@@ -1283,7 +1295,7 @@ public class XParser: Parser {
                                             try error("entity with name \"\(entityName)\" declared more than once")
                                         }
                                         if internalEntityAutoResolve {
-                                            internalEntityDatas[entityName] = value.data(using: .utf8)
+                                            internalEntityResolutions[entityName] = value
                                         }
                                         broadcast { (eventHandler,textRange,dataRange) in
                                             eventHandler.internalEntityDeclaration(
