@@ -344,6 +344,32 @@ public class XParser: Parser {
             newParsePosition()
         }
         
+        func makeText() throws {
+            if !texts.isEmpty {
+               if elementLevel > 0 {
+                    if textAllowedInElementWithName?(ancestors.peek()!) == false {
+                        if !isWhitespace {
+                            try error("non-whitespace #1 text in \(ancestors.elements.joined(separator: " / ")): \"\(formatNonWhitespace(texts.joined()))\"")
+                        }
+                    }
+                    else {
+                        let text = texts.joined().replacingOccurrences(of: "\r\n", with: "\n")
+                        broadcast(
+                            endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryPosition
+                        ) { (eventHandler,textRange,dataRange) in
+                            eventHandler.text(
+                                text: text,
+                                whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
+                                textRange: textRange,
+                                dataRange: dataRange
+                            )
+                        }
+                    }
+                }
+                texts.removeAll()
+            }
+        }
+        
         var ignoreNextLinebreak = -1
         
         binaryLoop: while true {
@@ -385,6 +411,10 @@ public class XParser: Parser {
                         }
                     }
                     restoreParsePosition()
+                    if state != .TEXT {
+                        try error("data source does not end in textual content")
+                    }
+                    try makeText()
                     switch sleepReason {
                     case .internalSource:  broadcast() { (eventHandler,textRange,dataRange) in eventHandler.leaveInternalDataSource() }
                     case .externalSource:  broadcast() { (eventHandler,textRange,dataRange) in eventHandler.leaveExternalDataSource() }
@@ -572,29 +602,7 @@ public class XParser: Parser {
                             if binaryPosition > parsedBefore {
                                 texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                             }
-                            if !texts.isEmpty {
-                                if elementLevel > 0 {
-                                    if textAllowedInElementWithName?(ancestors.peek()!) == false {
-                                        if !isWhitespace {
-                                            try error("non-whitespace #1 text in \(ancestors.elements.joined(separator: " / ")): \"\(formatNonWhitespace(texts.joined()))\"")
-                                        }
-                                    }
-                                    else {
-                                        let text = texts.joined().replacingOccurrences(of: "\r\n", with: "\n")
-                                        broadcast(
-                                            endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryPosition
-                                        ) { (eventHandler,textRange,dataRange) in
-                                            eventHandler.text(
-                                                text: text,
-                                                whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
-                                                textRange: textRange,
-                                                dataRange: dataRange
-                                            )
-                                        }
-                                    }
-                                }
-                                texts.removeAll()
-                            }
+                            try makeText()
                             isWhitespace = true
                             state = .JUST_STARTED_WITH_LESS_THAN_SIGN
                             parsedBefore = binaryPosition + 1
