@@ -128,7 +128,7 @@ public class XParser: Parser {
         fromData _data: Data,
         sourceInfo: String? = nil,
         eventHandlers: [XEventHandler],
-        immediateTextHandlingNearEntities: ImmediateTextHandlingNearEntities = .never
+        immediateTextHandlingNearEntities: ImmediateTextHandlingNearEntities = .atExternalEntities
     ) throws {
         
         var line = 1; var lastLine = 1
