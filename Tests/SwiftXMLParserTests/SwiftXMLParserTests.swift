@@ -236,14 +236,14 @@ final class SwiftXMLParserTests: XCTestCase {
                 start of element: name "a", no attributes; 1:1 - 1:3 (0..<3 in data)
                   in current source:  from data: {<a>}, from lines: {<a>}
                   in original source: from data: {<a>}, from lines: {<a>}
-                text: "Hello & ", whitespace indicator NOT_WHITESPACE; 1:1 - 1:18 (0..<12 in data)
-                  in current source:  from data: {Hello &amp; }, from lines: {Hello &amp; &test2}
+                text: "Hello & ", whitespace indicator NOT_WHITESPACE; 1:13 - 1:18 (0..<12 in data)
+                  in current source:  from data: {Hello &amp; }, from lines: {&test2}
                   in original source: from data: {&test1;}, from lines: {&test1;}
                 text: "< so", whitespace indicator NOT_WHITESPACE; 1:1 - 1:7 (0..<7 in data)
                   in current source:  from data: {&lt; so}, from lines: {&lt; so}
                   in original source: from data: {&test1;}, from lines: {&test1;}
-                text: " ", whitespace indicator WHITESPACE; 1:1 - 1:20 (0..<20 in data)
-                  in current source:  from data: {Hello &amp; &test2; }, from lines: {Hello &amp; &test2; }
+                text: " ", whitespace indicator WHITESPACE; 1:20 - 1:20 (19..<20 in data)
+                  in current source:  from data: { }, from lines: { }
                   in original source: from data: {&test1;}, from lines: {&test1;}
                 start of element: name "b", no attributes; 1:21 - 1:24 (20..<24 in data)
                   in current source:  from data: {<b/>}, from lines: {<b/>}

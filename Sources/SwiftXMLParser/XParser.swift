@@ -344,7 +344,7 @@ public class XParser: Parser {
             newParsePosition()
         }
         
-        func makeText(parsedBefore: Int = mainParsedBefore, binaryUntil: Int = binaryPosition) throws {
+        func makeText(binaryUntil: Int = binaryPosition, startColumn: Int = mainStartColumn) throws {
             if !texts.isEmpty {
                if elementLevel > 0 {
                     if textAllowedInElementWithName?(ancestors.peek()!) == false {
@@ -354,8 +354,7 @@ public class XParser: Parser {
                     }
                     else {
                         let text = texts.joined().replacingOccurrences(of: "\r\n", with: "\n")
-                        broadcast(
-                            parsedBefore: parsedBefore, endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryUntil
+                        broadcast(startColumn: startColumn, endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryUntil
                         ) { (eventHandler,textRange,dataRange) in
                             eventHandler.text(
                                 text: text,
@@ -367,6 +366,10 @@ public class XParser: Parser {
                     }
                 }
                 isWhitespace = true
+                parsedBefore = binaryPosition + 1
+                mainParsedBefore = parsedBefore
+                mainStartLine = line
+                mainStartColumn = column + 1
                 texts.removeAll()
             }
         }
@@ -616,9 +619,7 @@ public class XParser: Parser {
                                 texts.append(String(decoding: data.subdata(in: parsedBefore..<binaryPosition), as: UTF8.self))
                             }
                             try makeText()
-                            isWhitespace = true
                             state = .JUST_STARTED_WITH_LESS_THAN_SIGN
-                            parsedBefore = binaryPosition + 1
                             setMainStart()
                         }
                         else {
@@ -882,7 +883,7 @@ public class XParser: Parser {
                                     try error("no utf-8 data for \"\(formatNonWhitespace(resolution))\"")
                                 }
                                 if immediateTextHandlingNearEntities == .always || immediateTextHandlingNearEntities == .atInternalEntities {
-                                    try makeText(binaryUntil: entityBinaryStart)
+                                    try makeText(binaryUntil: entityBinaryStart, startColumn: entityStartColumn)
                                 }
                                 broadcast(parsedBefore: entityBinaryStart, startLine: entityStartLine, startColumn: entityStartColumn) { (eventHandler,textRange,dataRange) in
                                     eventHandler.enterInternalDataSource(data: resolutionData!, entityName: entityText, textRange: textRange, dataRange: dataRange)
