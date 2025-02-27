@@ -11,7 +11,7 @@ let package = Package(
             targets: ["SwiftXMLParser"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/stefanspringer1/SwiftXMLInterfaces", from: "5.0.0"),
+        .package(url: "https://github.com/stefanspringer1/SwiftXMLInterfaces", from: "5.0.3"),
     ],
     targets: [
         .target(

@@ -659,26 +659,16 @@ public class XParser: Parser {
                                 if elementLevel == 0 && someElement {
                                     try error("multiple root elements")
                                 }
-                                if attributes.isEmpty {
-                                    broadcast { (eventHandler,textRange,dataRange) in
-                                        eventHandler.elementStart(
-                                            name: name ?? "",
-                                            attributes: nil,
-                                            textRange: textRange,
-                                            dataRange: dataRange
-                                        )
-                                    }
+                                broadcast { (eventHandler,textRange,dataRange) in
+                                    eventHandler.elementStart(
+                                        name: name ?? "",
+                                        attributes: &attributes,
+                                        textRange: textRange,
+                                        dataRange: dataRange
+                                    )
                                 }
-                                else {
-                                    broadcast { (eventHandler,textRange,dataRange) in
-                                        eventHandler.elementStart(
-                                            name: name ?? "",
-                                            attributes: attributes,
-                                            textRange: textRange,
-                                            dataRange: dataRange
-                                        )
-                                    }
-                                    attributes = [String:String]()
+                                if !attributes.isEmpty {
+                                    attributes.removeAll()
                                 }
                                 someElement = true
                                 ancestors.push(name ?? "")
@@ -1015,26 +1005,16 @@ public class XParser: Parser {
                         if elementLevel == 0 && someElement {
                             try error("multiple root elements")
                         }
-                        if attributes.isEmpty {
-                            broadcast { (eventHandler,textRange,dataRange) in
-                                eventHandler.elementStart(
-                                    name: name ?? "",
-                                    attributes: nil,
-                                    textRange: textRange,
-                                    dataRange: dataRange
-                                )
-                            }
+                        broadcast { (eventHandler,textRange,dataRange) in
+                            eventHandler.elementStart(
+                                name: name ?? "",
+                                attributes: &attributes,
+                                textRange: textRange,
+                                dataRange: dataRange
+                            )
                         }
-                        else {
-                            broadcast { (eventHandler,textRange,dataRange) in
-                                eventHandler.elementStart(
-                                    name: name ?? "",
-                                    attributes: attributes,
-                                    textRange: textRange,
-                                    dataRange: dataRange
-                                )
-                            }
-                            attributes = [String:String]()
+                        if !attributes.isEmpty {
+                            attributes.removeAll()
                         }
                         broadcast { (eventHandler,textRange,dataRange) in
                             eventHandler.elementEnd(
