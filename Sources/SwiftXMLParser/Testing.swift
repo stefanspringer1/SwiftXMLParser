@@ -71,7 +71,7 @@ public protocol XTestWriter {
     func writeLine(_: String)
 }
 
-enum ParseExceptions: Error{
+enum ParseExceptions: Error {
     case lineDoesNotExist(String)
     case unknown(String)
 }
