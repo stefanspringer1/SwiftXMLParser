@@ -22,16 +22,7 @@ final class SwiftXMLParserTests: XCTestCase {
         let source = """
                     <div class="tr--p annotate">Hallo <b>Welt!</b></div>
                     """
-        let parser = XParser(
-            textAllowedInElementWithName: {
-                [
-                   "p",
-                   "b",
-                   "div"
-                   // ...
-               ].contains($0)
-            }
-        )
+        let parser = XParser(textAllowedInElementWithName: ["p","b","div"])
         try parser.parse(fromData: source.data(using: .utf8)!, eventHandlers: [])
     }
     
