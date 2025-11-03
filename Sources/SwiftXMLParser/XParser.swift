@@ -244,20 +244,24 @@ public class XParser: Parser {
         
         @inline(__always) func broadcast(
             textRange: XTextRange, dataRange: XDataRange,
-            processEventHandler: (XEventHandler,XTextRange,XDataRange) -> ()
-        ) {
-            for eventHandler in eventHandlers {
-                processEventHandler(eventHandler,textRange,dataRange)
+            processEventHandler: (XEventHandler,XTextRange,XDataRange) -> (Bool)
+        ) -> Bool {
+            eventHandlers.reduce(true) { result, eventHandler in
+                result && processEventHandler(eventHandler,textRange,dataRange)
             }
         }
         
         var sleepingParsingDatas = [ParsingDataForSource]()
         
         @inline(__always) func broadcast(
-            parsedBefore: Int = mainParsedBefore, startLine: Int = mainStartLine, startColumn: Int = mainStartColumn,
-            endLine: Int = line, endColumn: Int = column, binaryUntil: Int = binaryPosition + 1,
-            processEventHandler: (XEventHandler,XTextRange,XDataRange) -> ()
-        ) {
+            parsedBefore: Int = mainParsedBefore,
+            startLine: Int = mainStartLine,
+            startColumn: Int = mainStartColumn,
+            endLine: Int = line,
+            endColumn: Int = column,
+            binaryUntil: Int = binaryPosition + 1,
+            processEventHandler: (XEventHandler,XTextRange,XDataRange) -> (Bool)
+        ) -> Bool {
             let textRange = XTextRange(
                 startLine: startLine,
                 startColumn: startColumn,
@@ -268,14 +272,18 @@ public class XParser: Parser {
                 binaryStart: parsedBefore,
                 binaryUntil: binaryUntil
             )
-            broadcast(
+            return broadcast(
                 textRange: textRange, dataRange: dataRange,
                 processEventHandler: processEventHandler
             )
         }
         
-        broadcast { (eventHandler,XTextRange,XDataRange) in
-            eventHandler.documentStart()
+        if !broadcast(
+            processEventHandler: { (eventHandler,XTextRange,XDataRange) in
+                eventHandler.documentStart()
+            }
+        ) {
+            return
         }
         
         var codePoint: UnicodeCodePoint = 0
@@ -354,14 +362,21 @@ public class XParser: Parser {
                     }
                     else {
                         let text = texts.joined().replacingOccurrences(of: "\r\n", with: "\n")
-                        broadcast(startColumn: startColumn, endLine: lastLine, endColumn: lastColumn, binaryUntil: binaryUntil
-                        ) { (eventHandler,textRange,dataRange) in
-                            eventHandler.text(
-                                text: text,
-                                whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
-                                textRange: textRange,
-                                dataRange: dataRange
-                            )
+                        if !broadcast(
+                            startColumn: startColumn,
+                            endLine: lastLine,
+                            endColumn: lastColumn,
+                            binaryUntil: binaryUntil,
+                            processEventHandler: { (eventHandler,textRange,dataRange) in
+                                eventHandler.text(
+                                    text: text,
+                                    whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
+                                    textRange: textRange,
+                                    dataRange: dataRange
+                                )
+                                }
+                        ) {
+                            return
                         }
                     }
                 }
@@ -423,16 +438,24 @@ public class XParser: Parser {
                             try makeText()
                         }
                         restoreParsePosition()
-                        broadcast { (eventHandler,textRange,dataRange) in
-                            eventHandler.leaveInternalDataSource()
+                        if !broadcast(
+                            processEventHandler: { (eventHandler,textRange,dataRange) in
+                                eventHandler.leaveInternalDataSource()
+                            }
+                        ) {
+                            return
                         }
                     case .externalSource:
                         if immediateTextHandlingNearEntities == .always || immediateTextHandlingNearEntities == .atExternalEntities {
                             try makeText(); parsedBefore = entityBinaryStart
                         }
                         restoreParsePosition()
-                        broadcast { (eventHandler,textRange,dataRange) in
-                            eventHandler.leaveExternalDataSource()
+                        if !broadcast(
+                            processEventHandler: { (eventHandler,textRange,dataRange) in
+                                eventHandler.leaveExternalDataSource()
+                            }
+                        ) {
+                            return
                         }
                     }
                     data = awakenedData
@@ -659,13 +682,17 @@ public class XParser: Parser {
                                 if elementLevel == 0 && someElement {
                                     try error("multiple root elements")
                                 }
-                                broadcast { (eventHandler,textRange,dataRange) in
-                                    eventHandler.elementStart(
-                                        name: name ?? "",
-                                        attributes: &attributes,
-                                        textRange: textRange,
-                                        dataRange: dataRange
-                                    )
+                                if !broadcast(
+                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                        eventHandler.elementStart(
+                                            name: name ?? "",
+                                            attributes: &attributes,
+                                            textRange: textRange,
+                                            dataRange: dataRange
+                                        )
+                                    }
+                                ) {
+                                    return
                                 }
                                 if !attributes.isEmpty {
                                     attributes.removeAll()
@@ -751,12 +778,16 @@ public class XParser: Parser {
                         if (name ?? "") != ancestors.peek() {
                             try error("name end tag \"\(name ?? "")\" does not match name of open element \"\(ancestors.peek() ?? "")\"")
                         }
-                        broadcast { (eventHandler,textRange,dataRange) in
-                            eventHandler.elementEnd(
-                                name: name ?? "",
-                                textRange: textRange,
-                                dataRange: dataRange
-                            )
+                        if !broadcast(
+                            processEventHandler: { (eventHandler,textRange,dataRange) in
+                                eventHandler.elementEnd(
+                                    name: name ?? "",
+                                    textRange: textRange,
+                                    dataRange: dataRange
+                                )
+                            }
+                        ) {
+                            return
                         }
                         _ = ancestors.pop()
                         elementLevel -= 1
@@ -875,8 +906,15 @@ public class XParser: Parser {
                                 if immediateTextHandlingNearEntities == .always || immediateTextHandlingNearEntities == .atInternalEntities {
                                     try makeText(binaryUntil: entityBinaryStart, startColumn: entityStartColumn)
                                 }
-                                broadcast(parsedBefore: entityBinaryStart, startLine: entityStartLine, startColumn: entityStartColumn) { (eventHandler,textRange,dataRange) in
-                                    eventHandler.enterInternalDataSource(data: resolutionData!, entityName: entityText, textRange: textRange, dataRange: dataRange)
+                                if !broadcast(
+                                    parsedBefore: entityBinaryStart,
+                                    startLine: entityStartLine,
+                                    startColumn: entityStartColumn,
+                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                        eventHandler.enterInternalDataSource(data: resolutionData!, entityName: entityText, textRange: textRange, dataRange: dataRange)
+                                    }
+                                ) {
+                                    return
                                 }
                                 parsedBefore = binaryPosition + 1
                                 state = .TEXT
@@ -905,15 +943,20 @@ public class XParser: Parser {
                                     }
                                     else {
                                         let text = text.replacingOccurrences(of: "\r\n", with: "\n")
-                                        broadcast(
-                                            endLine: beforeEntityLine, endColumn: beforeEntityColumn, binaryUntil: entityBinaryStart
-                                        ) { (eventHandler,textRange,dataRange) in
-                                            eventHandler.text(
-                                                text: text,
-                                                whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
-                                                textRange: textRange,
-                                                dataRange: dataRange
-                                            )
+                                        if !broadcast(
+                                            endLine: beforeEntityLine,
+                                            endColumn: beforeEntityColumn,
+                                            binaryUntil: entityBinaryStart,
+                                            processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                eventHandler.text(
+                                                    text: text,
+                                                    whitespace: isWhitespace ? .WHITESPACE : .NOT_WHITESPACE,
+                                                    textRange: textRange,
+                                                    dataRange: dataRange
+                                                )
+                                            }
+                                        ) {
+                                            return
                                         }
                                     }
                                 }
@@ -949,20 +992,31 @@ public class XParser: Parser {
                                     if immediateTextHandlingNearEntities == .always || immediateTextHandlingNearEntities == .atInternalEntities {
                                         try makeText()
                                     }
-                                    broadcast(parsedBefore: entityBinaryStart, startLine: entityStartLine, startColumn: entityStartColumn) { (eventHandler,textRange,dataRange) in
-                                        eventHandler.enterExternalDataSource(data: theNewData, entityName: entityText, systemID: externalParsedEntitySystemID, url: url, textRange: textRange, dataRange: dataRange)
+                                    if !broadcast(
+                                        parsedBefore: entityBinaryStart,
+                                        startLine: entityStartLine,
+                                        startColumn: entityStartColumn,
+                                        processEventHandler: { (eventHandler,textRange,dataRange) in
+                                            eventHandler.enterExternalDataSource(data: theNewData, entityName: entityText, systemID: externalParsedEntitySystemID, url: url, textRange: textRange, dataRange: dataRange)
+                                        }
+                                    ) {
+                                        return
                                     }
                                     parsedBefore = binaryPosition + 1
                                     state = .TEXT
                                     try startNewData(newData: theNewData, dataSourceType: .externalSource)
                                 }
                                 else {
-                                    broadcast { (eventHandler,textRange,dataRange) in
-                                        eventHandler.externalEntity(
-                                            name: entityText,
-                                            textRange: textRange,
-                                            dataRange: dataRange
-                                        )
+                                    if !broadcast(
+                                        processEventHandler: { (eventHandler,textRange,dataRange) in
+                                            eventHandler.externalEntity(
+                                                name: entityText,
+                                                textRange: textRange,
+                                                dataRange: dataRange
+                                            )
+                                        }
+                                    ) {
+                                        return
                                     }
                                     parsedBefore = binaryPosition + 1
                                     state = .TEXT
@@ -970,12 +1024,16 @@ public class XParser: Parser {
                                 }
                             }
                             else {
-                                broadcast { (eventHandler,textRange,dataRange) in
-                                    eventHandler.internalEntity(
-                                        name: entityText,
-                                        textRange: textRange,
-                                        dataRange: dataRange
-                                    )
+                                if !broadcast(
+                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                        eventHandler.internalEntity(
+                                            name: entityText,
+                                            textRange: textRange,
+                                            dataRange: dataRange
+                                        )
+                                    }
+                                ) {
+                                    return
                                 }
                                 parsedBefore = binaryPosition + 1
                                 state = .TEXT
@@ -1005,23 +1063,31 @@ public class XParser: Parser {
                         if elementLevel == 0 && someElement {
                             try error("multiple root elements")
                         }
-                        broadcast { (eventHandler,textRange,dataRange) in
-                            eventHandler.elementStart(
-                                name: name ?? "",
-                                attributes: &attributes,
-                                textRange: textRange,
-                                dataRange: dataRange
-                            )
+                        if !broadcast(
+                            processEventHandler: { (eventHandler,textRange,dataRange) in
+                                eventHandler.elementStart(
+                                    name: name ?? "",
+                                    attributes: &attributes,
+                                    textRange: textRange,
+                                    dataRange: dataRange
+                                )
+                            }
+                        ) {
+                            return
                         }
                         if !attributes.isEmpty {
                             attributes.removeAll()
                         }
-                        broadcast { (eventHandler,textRange,dataRange) in
-                            eventHandler.elementEnd(
-                                name: name ?? "",
-                                textRange: textRange,
-                                dataRange: dataRange
-                            )
+                        if !broadcast(
+                            processEventHandler: { (eventHandler,textRange,dataRange) in
+                                eventHandler.elementEnd(
+                                    name: name ?? "",
+                                    textRange: textRange,
+                                    dataRange: dataRange
+                                )
+                            }
+                        ) {
+                            return
                         }
                         someElement = true
                         name = nil
@@ -1057,13 +1123,17 @@ public class XParser: Parser {
                             }
                             else {
                                 let data = parsedBefore<binaryPosition-1 ? String(decoding: data.subdata(in: parsedBefore..<binaryPosition-1), as: UTF8.self): nil
-                                broadcast { (eventHandler,textRange,dataRange) in
-                                    eventHandler.processingInstruction(
-                                        target: target,
-                                        data: data,
-                                        textRange: textRange,
-                                        dataRange: dataRange
-                                    )
+                                if !broadcast(
+                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                        eventHandler.processingInstruction(
+                                            target: target,
+                                            data: data,
+                                            textRange: textRange,
+                                            dataRange: dataRange
+                                        )
+                                    }
+                                ) {
+                                    return
                                 }
                             }
                             name = nil
@@ -1100,12 +1170,16 @@ public class XParser: Parser {
                     case U_GREATER_THAN_SIGN:
                         if lastCodePoint == U_RIGHT_SQUARE_BRACKET && lastLastCodePoint == U_RIGHT_SQUARE_BRACKET {
                             let text = String(decoding: data.subdata(in: parsedBefore..<binaryPosition-2), as: UTF8.self)
-                            broadcast { (eventHandler,textRange,dataRange) in
-                                eventHandler.cdataSection(
-                                    text: text,
-                                    textRange: textRange,
-                                    dataRange: dataRange
-                                )
+                            if !broadcast(
+                                processEventHandler: { (eventHandler,textRange,dataRange) in
+                                    eventHandler.cdataSection(
+                                        text: text,
+                                        textRange: textRange,
+                                        dataRange: dataRange
+                                    )
+                                }
+                            ) {
+                                return
                             }
                             parsedBefore = binaryPosition + 1
                             setMainStart()
@@ -1122,12 +1196,16 @@ public class XParser: Parser {
                         case U_GREATER_THAN_SIGN:
                             if lastCodePoint == U_HYPHEN_MINUS && lastLastCodePoint == U_HYPHEN_MINUS {
                                 let text = String(decoding: data.subdata(in: parsedBefore..<binaryPosition-2), as: UTF8.self)
-                                broadcast { (eventHandler,textRange,dataRange) in
-                                    eventHandler.comment(
-                                        text: text,
-                                        textRange: textRange,
-                                        dataRange: dataRange
-                                    )
+                                if !broadcast(
+                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                        eventHandler.comment(
+                                            text: text,
+                                            textRange: textRange,
+                                            dataRange: dataRange
+                                        )
+                                    }
+                                ) {
+                                    return
                                 }
                                 parsedBefore = binaryPosition + 1
                                 setMainStart()
@@ -1168,14 +1246,18 @@ public class XParser: Parser {
                                         if items.count == 3,
                                            let publicID = (items[2] as? quotedParseResult)?.value
                                         {
-                                            broadcast { (eventHandler,textRange,dataRange) in
-                                                eventHandler.documentTypeDeclarationStart(
-                                                    type: name,
-                                                    publicID: publicID,
-                                                    systemID: nil,
-                                                    textRange: textRange,
-                                                    dataRange: dataRange
-                                                )
+                                            if !broadcast(
+                                                processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                    eventHandler.documentTypeDeclarationStart(
+                                                        type: name,
+                                                        publicID: publicID,
+                                                        systemID: nil,
+                                                        textRange: textRange,
+                                                        dataRange: dataRange
+                                                    )
+                                                }
+                                            ) {
+                                                return
                                             }
                                             success = true
                                         }
@@ -1184,14 +1266,18 @@ public class XParser: Parser {
                                         if items.count == 3 {
                                             if let publicID = (items[2] as? quotedParseResult)?.value
                                                {
-                                                broadcast { (eventHandler,textRange,dataRange) in
-                                                    eventHandler.documentTypeDeclarationStart(
-                                                        type: name,
-                                                        publicID: publicID,
-                                                        systemID:  nil,
-                                                        textRange: textRange,
-                                                        dataRange: dataRange
-                                                    )
+                                                if !broadcast(
+                                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                        eventHandler.documentTypeDeclarationStart(
+                                                            type: name,
+                                                            publicID: publicID,
+                                                            systemID:  nil,
+                                                            textRange: textRange,
+                                                            dataRange: dataRange
+                                                        )
+                                                    }
+                                                ) {
+                                                    return
                                                 }
                                                 success = true
                                             }
@@ -1200,14 +1286,18 @@ public class XParser: Parser {
                                             if let publicID = (items[2] as? quotedParseResult)?.value,
                                                let systemID = (items[3] as? quotedParseResult)?.value
                                             {
-                                                broadcast { (eventHandler,textRange,dataRange) in
-                                                    eventHandler.documentTypeDeclarationStart(
-                                                        type: name,
-                                                        publicID: publicID,
-                                                        systemID: systemID,
-                                                        textRange: textRange,
-                                                        dataRange: dataRange
-                                                    )
+                                                if !broadcast(
+                                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                        eventHandler.documentTypeDeclarationStart(
+                                                            type: name,
+                                                            publicID: publicID,
+                                                            systemID: systemID,
+                                                            textRange: textRange,
+                                                            dataRange: dataRange
+                                                        )
+                                                    }
+                                                ) {
+                                                    return
                                                 }
                                                 success = true
                                             }
@@ -1215,14 +1305,18 @@ public class XParser: Parser {
                                     }
                                 }
                                 else {
-                                    broadcast { (eventHandler,textRange,dataRange) in
-                                        eventHandler.documentTypeDeclarationStart(
-                                            type: name,
-                                            publicID: nil,
-                                            systemID: nil,
-                                            textRange: textRange,
-                                            dataRange: dataRange
-                                        )
+                                    if !broadcast(
+                                        processEventHandler: { (eventHandler,textRange,dataRange) in
+                                            eventHandler.documentTypeDeclarationStart(
+                                                type: name,
+                                                publicID: nil,
+                                                systemID: nil,
+                                                textRange: textRange,
+                                                dataRange: dataRange
+                                            )
+                                        }
+                                    ) {
+                                        return
                                     }
                                     success = true
                                 }
@@ -1235,11 +1329,15 @@ public class XParser: Parser {
                                 try error("missing type in document type declaration")
                             }
                             if codePoint == U_GREATER_THAN_SIGN {
-                                broadcast { (eventHandler,textRange,dataRange) in
-                                    eventHandler.documentTypeDeclarationEnd(
-                                        textRange: textRange,
-                                        dataRange: dataRange
-                                    )
+                                if !broadcast(
+                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                        eventHandler.documentTypeDeclarationEnd(
+                                            textRange: textRange,
+                                            dataRange: dataRange
+                                        )
+                                    }
+                                ) {
+                                    return
                                 }
                                 state = .TEXT
                             }
@@ -1259,13 +1357,17 @@ public class XParser: Parser {
                                         if declaredParameterEntityNames.contains(realEntityName) {
                                             try error("parameter entity with name \"\(realEntityName)\" declared more than once")
                                         }
-                                        broadcast { (eventHandler,textRange,dataRange) in
-                                            eventHandler.parameterEntityDeclaration(
-                                                name: realEntityName,
-                                                value: value,
-                                                textRange: textRange,
-                                                dataRange: dataRange
-                                            )
+                                        if !broadcast(
+                                            processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                eventHandler.parameterEntityDeclaration(
+                                                    name: realEntityName,
+                                                    value: value,
+                                                    textRange: textRange,
+                                                    dataRange: dataRange
+                                                )
+                                            }
+                                        ) {
+                                            return
                                         }
                                         declaredParameterEntityNames.insert(realEntityName)
                                         success = true
@@ -1279,13 +1381,17 @@ public class XParser: Parser {
                                         if internalEntityAutoResolve {
                                             internalEntityResolutions[entityName] = value
                                         }
-                                        broadcast { (eventHandler,textRange,dataRange) in
-                                            eventHandler.internalEntityDeclaration(
-                                                name: entityName,
-                                                value: value,
-                                                textRange: textRange,
-                                                dataRange: dataRange
-                                            )
+                                        if !broadcast(
+                                            processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                eventHandler.internalEntityDeclaration(
+                                                    name: entityName,
+                                                    value: value,
+                                                    textRange: textRange,
+                                                    dataRange: dataRange
+                                                )
+                                            }
+                                        ) {
+                                            return
                                         }
                                         declaredEntityNames.insert(entityName)
                                         success = true
@@ -1310,15 +1416,19 @@ public class XParser: Parser {
                                                     if declaredEntityNames.contains(entityName) {
                                                         try error("entity with name \"\(entityName)\" declared more than once")
                                                     }
-                                                    broadcast { (eventHandler,textRange,dataRange) in
-                                                        eventHandler.unparsedEntityDeclaration(
-                                                            name: entityName,
-                                                            publicID: publicValue,
-                                                            systemID: systemValue,
-                                                            notation: notation.value,
-                                                            textRange: textRange,
-                                                            dataRange: dataRange
-                                                        )
+                                                    if !broadcast(
+                                                        processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                            eventHandler.unparsedEntityDeclaration(
+                                                                name: entityName,
+                                                                publicID: publicValue,
+                                                                systemID: systemValue,
+                                                                notation: notation.value,
+                                                                textRange: textRange,
+                                                                dataRange: dataRange
+                                                            )
+                                                        }
+                                                    ) {
+                                                        return
                                                     }
                                                     externalEntityNames.insert(entityName)
                                                     declaredEntityNames.insert(entityName)
@@ -1330,14 +1440,18 @@ public class XParser: Parser {
                                                     try error("entity with name \"\(entityName)\" declared more than once")
                                                 }
                                                 externalParsedEntitySystemIDs[entityName] = systemValue
-                                                broadcast { (eventHandler,textRange,dataRange) in
-                                                    eventHandler.externalEntityDeclaration(
-                                                        name: entityName,
-                                                        publicID: publicValue,
-                                                        systemID: systemValue,
-                                                        textRange: textRange,
-                                                        dataRange: dataRange
-                                                    )
+                                                if !broadcast(
+                                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                        eventHandler.externalEntityDeclaration(
+                                                            name: entityName,
+                                                            publicID: publicValue,
+                                                            systemID: systemValue,
+                                                            textRange: textRange,
+                                                            dataRange: dataRange
+                                                        )
+                                                    }
+                                                ) {
+                                                    return
                                                 }
                                                 externalEntityNames.insert(entityName)
                                                 declaredEntityNames.insert(entityName)
@@ -1368,14 +1482,18 @@ public class XParser: Parser {
                                             if declaredNotationNames.contains(notationName) {
                                                 try error("notation \"\(notationName)\" declared more than once")
                                             }
-                                            broadcast { (eventHandler,textRange,dataRange) in
-                                                eventHandler.notationDeclaration(
-                                                    name: notationName,
-                                                    publicID: publicValue,
-                                                    systemID: systemValue,
-                                                    textRange: textRange,
-                                                    dataRange: dataRange
-                                                )
+                                            if !broadcast(
+                                                processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                    eventHandler.notationDeclaration(
+                                                        name: notationName,
+                                                        publicID: publicValue,
+                                                        systemID: systemValue,
+                                                        textRange: textRange,
+                                                        dataRange: dataRange
+                                                    )
+                                                }
+                                            ) {
+                                                return
                                             }
                                             declaredNotationNames.insert(notationName)
                                             success = true
@@ -1388,25 +1506,33 @@ public class XParser: Parser {
                                                 try error("notation \"\(notationName)\" declared more than once")
                                             }
                                             if hasPublicToken {
-                                                broadcast { (eventHandler,textRange,dataRange) in
-                                                    eventHandler.notationDeclaration(
-                                                        name: notationName,
-                                                        publicID: publicOrSystemValue,
-                                                        systemID: nil,
-                                                        textRange: textRange,
-                                                        dataRange: dataRange
-                                                    )
+                                                if !broadcast(
+                                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                        eventHandler.notationDeclaration(
+                                                            name: notationName,
+                                                            publicID: publicOrSystemValue,
+                                                            systemID: nil,
+                                                            textRange: textRange,
+                                                            dataRange: dataRange
+                                                        )
+                                                    }
+                                                ) {
+                                                    return
                                                 }
                                             }
                                             else {
-                                                broadcast { (eventHandler,textRange,dataRange) in
-                                                    eventHandler.notationDeclaration(
-                                                        name: notationName,
-                                                        publicID: nil,
-                                                        systemID: publicOrSystemValue,
-                                                        textRange: textRange,
-                                                        dataRange: dataRange
-                                                    )
+                                                if !broadcast(
+                                                    processEventHandler: { (eventHandler,textRange,dataRange) in
+                                                        eventHandler.notationDeclaration(
+                                                            name: notationName,
+                                                            publicID: nil,
+                                                            systemID: publicOrSystemValue,
+                                                            textRange: textRange,
+                                                            dataRange: dataRange
+                                                        )
+                                                    }
+                                                ) {
+                                                    return
                                                 }
                                             }
                                             declaredNotationNames.insert(notationName)
@@ -1713,13 +1839,17 @@ public class XParser: Parser {
                                         try error("element type \"\(theToken)\" declared more than once")
                                     }
                                     let literal = String(decoding: data.subdata(in: outerParsedBefore..<binaryPosition+1), as: UTF8.self)
-                                    broadcast { (eventHandler,textRange,dataRange) in
-                                        eventHandler.elementDeclaration(
-                                            name: theToken,
-                                            literal: literal,
-                                            textRange: textRange,
-                                            dataRange: dataRange
-                                        )
+                                    if !broadcast(
+                                        processEventHandler: { (eventHandler,textRange,dataRange) in
+                                            eventHandler.elementDeclaration(
+                                                name: theToken,
+                                                literal: literal,
+                                                textRange: textRange,
+                                                dataRange: dataRange
+                                            )
+                                        }
+                                    ) {
+                                        return
                                     }
                                     declaredElementNames.insert(theToken)
                                 }
@@ -1737,13 +1867,17 @@ public class XParser: Parser {
                                         try error("attribute list for element type \"\(theToken)\" declared more than once")
                                     }
                                     let literal = String(decoding: data.subdata(in: outerParsedBefore..<binaryPosition+1), as: UTF8.self)
-                                    broadcast { (eventHandler,textRange,dataRange) in
-                                        eventHandler.attributeListDeclaration(
-                                            name: theToken,
-                                            literal: literal,
-                                            textRange: textRange,
-                                            dataRange: dataRange
-                                        )
+                                    if !broadcast(
+                                        processEventHandler: { (eventHandler,textRange,dataRange) in
+                                            eventHandler.attributeListDeclaration(
+                                                name: theToken,
+                                                literal: literal,
+                                                textRange: textRange,
+                                                dataRange: dataRange
+                                            )
+                                        }
+                                    ) {
+                                        return
                                     }
                                     declaredAttributeListNames.insert(theToken)
                                 }
@@ -1812,14 +1946,18 @@ public class XParser: Parser {
                             ignoreNextLinebreak = 2
                         }
                         else if let theVersion = version {
-                            broadcast { (eventHandler,textRange,dataRange) in
-                                eventHandler.xmlDeclaration(
-                                    version: theVersion,
-                                    encoding: encoding,
-                                    standalone: standalone,
-                                    textRange: textRange,
-                                    dataRange: dataRange
-                                )
+                            if !broadcast(
+                                processEventHandler: { (eventHandler,textRange,dataRange) in
+                                    eventHandler.xmlDeclaration(
+                                        version: theVersion,
+                                        encoding: encoding,
+                                        standalone: standalone,
+                                        textRange: textRange,
+                                        dataRange: dataRange
+                                    )
+                                }
+                            ) {
+                                return
                             }
                         }
                         else {
@@ -1839,11 +1977,15 @@ public class XParser: Parser {
                 case .DOCUMENT_TYPE_DECLARATION_TAIL:
                     switch codePoint {
                     case U_GREATER_THAN_SIGN:
-                        broadcast { (eventHandler,textRange,dataRange) in
-                            eventHandler.documentTypeDeclarationEnd(
-                                textRange: textRange,
-                                dataRange: dataRange
-                            )
+                        if !broadcast(
+                            processEventHandler: { (eventHandler,textRange,dataRange) in
+                                eventHandler.documentTypeDeclarationEnd(
+                                    textRange: textRange,
+                                    dataRange: dataRange
+                                )
+                            }
+                        ) {
+                            return
                         }
                         state = .TEXT
                         isWhitespace = true
@@ -1874,8 +2016,12 @@ public class XParser: Parser {
             try error("junk at end of document")
         }
         
-        broadcast { (eventHandler,textRange,dataRange) in
-            eventHandler.documentEnd()
+        if !broadcast(
+            processEventHandler: { (eventHandler,textRange,dataRange) in
+                eventHandler.documentEnd()
+            }
+        ) {
+            return
         }
     }
 }

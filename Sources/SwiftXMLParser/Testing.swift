@@ -135,30 +135,34 @@ public class XTestParsePrinter: XEventHandler {
     var originalTextRange: XTextRange? = nil
     var originalDataRange: XDataRange? = nil
     
-    public func enterInternalDataSource(data: Data, entityName: String, textRange: SwiftXMLInterfaces.XTextRange?, dataRange: SwiftXMLInterfaces.XDataRange?) {
+    public func enterInternalDataSource(data: Data, entityName: String, textRange: SwiftXMLInterfaces.XTextRange?, dataRange: SwiftXMLInterfaces.XDataRange?) -> Bool {
         print("entering replacement text for internal entity: name \"\(entityName)\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!, toStandardOut: true)
         print("  internal entity value: {\(String(data: data, encoding: String.Encoding.utf8)!)}")
         enterDataSourceCommon(data: data, textRange: textRange, dataRange: dataRange)
+        return true
     }
     
-    public func enterExternalDataSource(data: Data, entityName: String?, systemID: String, url: URL?, textRange: SwiftXMLInterfaces.XTextRange?, dataRange: SwiftXMLInterfaces.XDataRange?) {
+    public func enterExternalDataSource(data: Data, entityName: String?, systemID: String, url: URL?, textRange: SwiftXMLInterfaces.XTextRange?, dataRange: SwiftXMLInterfaces.XDataRange?) -> Bool {
         print("entering replacement text for external parsed entity: name \"\(entityName ?? "")\", path [\(url?.path ?? "")]; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!, toStandardOut: true)
         enterDataSourceCommon(data: data, textRange: textRange, dataRange: dataRange)
+        return true
     }
     
-    public func leaveInternalDataSource() {
+    public func leaveInternalDataSource() -> Bool {
         print("leaving internal replacement text")
         leaveDataSourceCommon()
+        return true
     }
     
-    public func leaveExternalDataSource() {
+    public func leaveExternalDataSource() -> Bool {
         print("leaving external replacement text")
         leaveDataSourceCommon()
+        return true
     }
     
-    public init(data: Data, writer: XTestWriter) throws {
+    public init(data: Data, writer: XTestWriter) throws  {
         self.data = data
         self.lines = linesFromData(data: data)
         self.writer = writer
@@ -219,26 +223,30 @@ public class XTestParsePrinter: XEventHandler {
         }
     }
     
-    public func documentStart() {
+    public func documentStart() -> Bool {
         write("document started")
+        return true
     }
     
-    public func xmlDeclaration(version: String, encoding: String?, standalone: String?, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func xmlDeclaration(version: String, encoding: String?, standalone: String?, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("XML declaration: version \"\(version.cited())\"\(encoding != nil ? ", encoding \"\(encoding!.cited())\"" : "")\(standalone != nil ? ", standalone \"\(standalone!.cited())\"" : ""); \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func documentTypeDeclarationStart(type: String, publicID: String?, systemID: String?, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func documentTypeDeclarationStart(type: String, publicID: String?, systemID: String?, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("document type declaration start: type \"\(type.cited())\"\(publicID != nil ? ", publicID \"\(publicID!.cited())\"" : "")\(systemID != nil ? ", systemID \"\(systemID!.cited())\"" : ""); \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func documentTypeDeclarationEnd(textRange: XTextRange?, dataRange: XDataRange?) {
+    public func documentTypeDeclarationEnd(textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("document type declaration end; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func elementStart(name: String, attributes: inout [String:String], textRange: XTextRange?, dataRange: XDataRange?) {
+    public func elementStart(name: String, attributes: inout [String:String], textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         if !attributes.isEmpty {
             write("start of element: name \"\(name.cited())\", attributes \(attributes.sorted{ $0.0 < $1.0 }.map{ "\"\($0)\": \"\($1.cited())\"" }.joined(separator: ", ")); \(textRange!) (\(dataRange!) in data)")
         }
@@ -246,80 +254,96 @@ public class XTestParsePrinter: XEventHandler {
             write("start of element: name \"\(name.cited())\", no attributes; \(textRange!) (\(dataRange!) in data)")
         }
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func elementEnd(name: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func elementEnd(name: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("end of element: name \"\(name.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func text(text: String, whitespace: WhitespaceIndicator, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func text(text: String, whitespace: WhitespaceIndicator, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("text: \"\(text.cited())\", whitespace indicator \(whitespace); \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func cdataSection(text: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func cdataSection(text: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("CDATA section: content \"\(text.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func processingInstruction(target: String, data: String?, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func processingInstruction(target: String, data: String?, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("processing instruction: target \"\(target.cited())\"\(data != nil ? ", content \"\(data!.cited())\"" : ""); \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func comment(text: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func comment(text: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("comment: content \"\(text.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func internalEntityDeclaration(name: String, value: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func internalEntityDeclaration(name: String, value: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("internal entity declaration: name \"\(name.cited())\", value \"\(value.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func externalEntityDeclaration(name: String, publicID: String?, systemID: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func externalEntityDeclaration(name: String, publicID: String?, systemID: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("external entity declaration: name \"\(name.cited())\"\(publicID != nil ? ", public ID: \"\(publicID!.cited())\"" : ""), system ID \"\(systemID.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func unparsedEntityDeclaration(name: String, publicID: String?, systemID: String, notation: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func unparsedEntityDeclaration(name: String, publicID: String?, systemID: String, notation: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("unparsed entity declaration: name \"\(name.cited())\"\(publicID != nil ? ", public ID: \"\(publicID!.cited())\"" : ""), system ID \"\(systemID.cited())\", notation \"\(notation.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func notationDeclaration(name: String, publicID: String?, systemID: String?, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func notationDeclaration(name: String, publicID: String?, systemID: String?, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("notation declaration: name \"\(name.cited())\"\(publicID != nil ? ", public ID: \"\(publicID!.cited())\"" : "")\(systemID != nil ? ", public ID: \"\(systemID!.cited())\"" : ""); \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func internalEntity(name: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func internalEntity(name: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("internal entity: name \"\(name.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func externalEntity(name: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func externalEntity(name: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("external entity: name \"\(name.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func elementDeclaration(name: String, literal: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func elementDeclaration(name: String, literal: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("element declaration: name \"\(name.cited())\": \"\(literal.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func attributeListDeclaration(name: String, literal: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func attributeListDeclaration(name: String, literal: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("attribute list declaration: name \"\(name.cited())\": \"\(literal.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func parameterEntityDeclaration(name: String, value: String, textRange: XTextRange?, dataRange: XDataRange?) {
+    public func parameterEntityDeclaration(name: String, value: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
         write("parameter entity declaration: name \"\(name.cited())\": \"\(value.cited())\"; \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
+        return true
     }
     
-    public func documentEnd() {
+    public func documentEnd() -> Bool {
         write("document ended")
+        return true
     }
     
 }

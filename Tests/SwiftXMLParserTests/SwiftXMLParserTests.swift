@@ -249,4 +249,78 @@ final class SwiftXMLParserTests: XCTestCase {
                 """#)
         }
     }
+    
+    func testParserAbortion() throws {
+        
+        let source = """
+            <a>
+                <b>
+                    <c/>
+                </b>
+            </a>
+            """
+        
+        class AbortingEventHandler: XDefaultEventHandler {
+            
+            let abortingAtElementWithName: String?
+            var messages = [String]()
+            
+            init(abortingAtElementWithName: String?) {
+                self.abortingAtElementWithName = abortingAtElementWithName
+            }
+            
+            override func elementStart(name: String, attributes: inout [String : String], textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
+                messages.append("starting <\(name)>")
+                if name == abortingAtElementWithName {
+                    messages.append("abort!")
+                    return false
+                } else {
+                    return true
+                }
+            }
+            
+            override func elementEnd(name: String, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
+                messages.append("ending <\(name)>")
+                return true
+            }
+            
+        }
+        
+        guard let data = source.data(using: .utf8) else {
+            throw XCTSkip("couldn't convert to utf8")
+        }
+        
+        do {
+            let abortingEventHandler = AbortingEventHandler(abortingAtElementWithName: nil)
+            try XParser().parse(fromData: data, eventHandlers: [abortingEventHandler])
+            XCTAssertEqual(abortingEventHandler.messages.joined(separator: "\n"), """
+                starting <a>
+                starting <b>
+                starting <c>
+                ending <c>
+                ending <b>
+                ending <a>
+                """)
+        }
+        
+        do {
+            let abortingEventHandler = AbortingEventHandler(abortingAtElementWithName: "a")
+            try XParser().parse(fromData: data, eventHandlers: [abortingEventHandler])
+            XCTAssertEqual(abortingEventHandler.messages.joined(separator: "\n"), """
+                starting <a>
+                abort!
+                """)
+        }
+        
+        do {
+            let abortingEventHandler = AbortingEventHandler(abortingAtElementWithName: "b")
+            try XParser().parse(fromData: data, eventHandlers: [abortingEventHandler])
+            XCTAssertEqual(abortingEventHandler.messages.joined(separator: "\n"), """
+                starting <a>
+                starting <b>
+                abort!
+                """)
+        }
+        
+    }
 }
