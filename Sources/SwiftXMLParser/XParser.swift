@@ -1249,7 +1249,7 @@ public class XParser: Parser {
                                             if !broadcast(
                                                 processEventHandler: { (eventHandler,textRange,dataRange) in
                                                     eventHandler.documentTypeDeclarationStart(
-                                                        type: name,
+                                                        name: name,
                                                         publicID: publicID,
                                                         systemID: nil,
                                                         textRange: textRange,
@@ -1269,7 +1269,7 @@ public class XParser: Parser {
                                                 if !broadcast(
                                                     processEventHandler: { (eventHandler,textRange,dataRange) in
                                                         eventHandler.documentTypeDeclarationStart(
-                                                            type: name,
+                                                            name: name,
                                                             publicID: publicID,
                                                             systemID:  nil,
                                                             textRange: textRange,
@@ -1289,7 +1289,7 @@ public class XParser: Parser {
                                                 if !broadcast(
                                                     processEventHandler: { (eventHandler,textRange,dataRange) in
                                                         eventHandler.documentTypeDeclarationStart(
-                                                            type: name,
+                                                            name: name,
                                                             publicID: publicID,
                                                             systemID: systemID,
                                                             textRange: textRange,
@@ -1308,7 +1308,7 @@ public class XParser: Parser {
                                     if !broadcast(
                                         processEventHandler: { (eventHandler,textRange,dataRange) in
                                             eventHandler.documentTypeDeclarationStart(
-                                                type: name,
+                                                name: name,
                                                 publicID: nil,
                                                 systemID: nil,
                                                 textRange: textRange,

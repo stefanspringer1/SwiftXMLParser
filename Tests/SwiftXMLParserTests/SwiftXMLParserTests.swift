@@ -87,7 +87,7 @@ final class SwiftXMLParserTests: XCTestCase {
         XML declaration: version "1.0", encoding "us-ascii"; 1:1 - 1:41 (0..<41 in data)
           in current source:  from data: {<?xml version="1.0" encoding="us-ascii"?>}, from lines: {<?xml version="1.0" encoding="us-ascii"?>}
           in original source: from data: {<?xml version="1.0" encoding="us-ascii"?>}, from lines: {<?xml version="1.0" encoding="us-ascii"?>}
-        document type declaration start: type "tr", publicID "+//ISO 9070/RA::A00007::GE::DIN German Institute for Standardization::Regulations//DTD Technical Regulation::Revision 3//EN", systemID "TR3000.dtd"; 2:1 - 3:1 (42..<202 in data)
+        document type declaration start: name "tr", publicID "+//ISO 9070/RA::A00007::GE::DIN German Institute for Standardization::Regulations//DTD Technical Regulation::Revision 3//EN", systemID "TR3000.dtd"; 2:1 - 3:1 (42..<202 in data)
           in current source:  from data: {<!DOCTYPE tr PUBLIC '+//ISO 9070/RA::A00007::GE::DIN German Institute for Standardization::Regulations//DTD Technical Regulation::Revision 3//EN' 'TR3000.dtd'
         [}, from lines: {<!DOCTYPE tr PUBLIC '+//ISO 9070/RA::A00007::GE::DIN German Institute for Standardization::Regulations//DTD Technical Regulation::Revision 3//EN' 'TR3000.dtd'}
           in original source: from data: {<!DOCTYPE tr PUBLIC '+//ISO 9070/RA::A00007::GE::DIN German Institute for Standardization::Regulations//DTD Technical Regulation::Revision 3//EN' 'TR3000.dtd'
@@ -136,7 +136,7 @@ final class SwiftXMLParserTests: XCTestCase {
         XML declaration: version "1.0", encoding "us-ascii"; 1:1 - 1:41 (0..<41 in data)
           in current source:  from data: {<?xml version="1.0" encoding="us-ascii"?>}, from lines: {<?xml version="1.0" encoding="us-ascii"?>}
           in original source: from data: {<?xml version="1.0" encoding="us-ascii"?>}, from lines: {<?xml version="1.0" encoding="us-ascii"?>}
-        document type declaration start: type "tr", publicID "+//ISO 9070/RA::A00007::GE::DIN German Institute for Standardization::Regulations//DTD Technical Regulation::Revision 3//EN", systemID "TR3000.dtd"; 2:1 - 3:1 (42..<202 in data)
+        document type declaration start: name "tr", publicID "+//ISO 9070/RA::A00007::GE::DIN German Institute for Standardization::Regulations//DTD Technical Regulation::Revision 3//EN", systemID "TR3000.dtd"; 2:1 - 3:1 (42..<202 in data)
           in current source:  from data: {<!DOCTYPE tr PUBLIC '+//ISO 9070/RA::A00007::GE::DIN German Institute for Standardization::Regulations//DTD Technical Regulation::Revision 3//EN' 'TR3000.dtd'
         [}, from lines: {<!DOCTYPE tr PUBLIC '+//ISO 9070/RA::A00007::GE::DIN German Institute for Standardization::Regulations//DTD Technical Regulation::Revision 3//EN' 'TR3000.dtd'}
           in original source: from data: {<!DOCTYPE tr PUBLIC '+//ISO 9070/RA::A00007::GE::DIN German Institute for Standardization::Regulations//DTD Technical Regulation::Revision 3//EN' 'TR3000.dtd'

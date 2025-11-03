@@ -234,8 +234,8 @@ public class XTestParsePrinter: XEventHandler {
         return true
     }
     
-    public func documentTypeDeclarationStart(type: String, publicID: String?, systemID: String?, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
-        write("document type declaration start: type \"\(type.cited())\"\(publicID != nil ? ", publicID \"\(publicID!.cited())\"" : "")\(systemID != nil ? ", systemID \"\(systemID!.cited())\"" : ""); \(textRange!) (\(dataRange!) in data)")
+    public func documentTypeDeclarationStart(name: String, publicID: String?, systemID: String?, textRange: XTextRange?, dataRange: XDataRange?) -> Bool {
+        write("document type declaration start: name \"\(name.cited())\"\(publicID != nil ? ", publicID \"\(publicID!.cited())\"" : "")\(systemID != nil ? ", systemID \"\(systemID!.cited())\"" : ""); \(textRange!) (\(dataRange!) in data)")
         writeExcerpt(forTextRange: textRange!, forDataRange: dataRange!)
         return true
     }
