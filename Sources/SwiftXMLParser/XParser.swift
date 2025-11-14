@@ -98,7 +98,7 @@ public class XParser: Parser {
     let internalEntityAutoResolve: Bool
     let internalEntityResolver: InternalEntityResolver?
     let internalEntityResolverHasToResolve: Bool
-    let textAllowedInElementWithName: ((String) -> Bool)?
+    let textAllowedInElementWithName: [String]?
     let insertExternalParsedEntities: Bool
     let externalParsedEntitySystemResolver: ((String) -> URL?)?
     let externalParsedEntityGetter: ((String) -> Data?)?
@@ -108,7 +108,7 @@ public class XParser: Parser {
         internalEntityAutoResolve: Bool = false,
         internalEntityResolver: InternalEntityResolver? = nil,
         internalEntityResolverHasToResolve: Bool = true,
-        textAllowedInElementWithName: ((String) -> Bool)? = nil,
+        textAllowedInElementWithName: [String]? = nil,
         insertExternalParsedEntities: Bool = true,
         externalParsedEntitySystemResolver: ((String) -> URL?)? = nil,
         externalParsedEntityGetter: ((String) -> Data?)? = nil,
@@ -355,7 +355,7 @@ public class XParser: Parser {
         func makeText(binaryUntil: Int = binaryPosition, startColumn: Int = mainStartColumn) throws {
             if !texts.isEmpty {
                if elementLevel > 0 {
-                   if textAllowedInElementWithName?(ancestors.peek()!) == false {
+                   if textAllowedInElementWithName?.contains(ancestors.peek()!) == false {
                         if !isWhitespace {
                             try error("non-whitespace #1 text in \(ancestors.elements.joined(separator: " / ")): \"\(formatNonWhitespace(texts.joined()))\"")
                         }
@@ -936,7 +936,7 @@ public class XParser: Parser {
                             if !texts.isEmpty {
                                 let text = texts.joined()
                                 if elementLevel > 0 {
-                                    if textAllowedInElementWithName?(ancestors.peek()!) == false {
+                                    if textAllowedInElementWithName?.contains(ancestors.peek()!) == false {
                                         if !isWhitespace {
                                             try error("non-whitespace #2 text in \(ancestors.elements.joined(separator: " / ")): \"\(formatNonWhitespace(text))\"")
                                         }
