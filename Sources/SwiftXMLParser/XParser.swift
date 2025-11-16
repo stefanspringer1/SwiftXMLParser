@@ -27,13 +27,13 @@ fileprivate let _DECLARATION_LIKE = _DOCUMENT_TYPE_DECLARATION_HEAD | _ENTITY_DE
 // other contants:
 fileprivate let EMPTY_QUOTE_SIGN: Data.Element = 0
 
-public protocol itemParseResult {
+fileprivate protocol itemParseResult {
     var description: String { get }
 }
 
 fileprivate struct tokenParseResult: itemParseResult {
     var value: String
-    public var description: String { return value }
+    var description: String { return value }
 }
 
 fileprivate extension String {
@@ -46,15 +46,9 @@ fileprivate extension String {
     }
 }
 
-public struct attributeParseResult: itemParseResult {
-    var name: String
-    var value: String
-    public var description: String { return name + "=\"" + value.xmlEscpape() + "\"" }
-}
-
 fileprivate struct quotedParseResult: itemParseResult {
     var value: String
-    public var description: String { return "\"" + value.xmlEscpape() + "\"" }
+    var description: String { return "\"" + value.xmlEscpape() + "\"" }
 }
 
 fileprivate enum State {
@@ -219,7 +213,7 @@ public class XParser: Parser {
         
         var someDocumentTypeDeclaration = false
         var someElement = false
-        var ancestors = Stack<String>()
+        var ancestors = [String]()
         
         var state = State.TEXT
         var outerState = State.TEXT
@@ -355,9 +349,9 @@ public class XParser: Parser {
         func makeText(binaryUntil: Int = binaryPosition, startColumn: Int = mainStartColumn) throws {
             if !texts.isEmpty {
                if elementLevel > 0 {
-                   if textAllowedInElementWithName?.contains(ancestors.peek()!) == false {
+                   if textAllowedInElementWithName?.contains(ancestors.last!) == false {
                         if !isWhitespace {
-                            try error("non-whitespace #1 text in \(ancestors.elements.joined(separator: " / ")): \"\(formatNonWhitespace(texts.joined()))\"")
+                            try error("non-whitespace #1 text in \(ancestors.joined(separator: " / ")): \"\(formatNonWhitespace(texts.joined()))\"")
                         }
                     }
                     else {
@@ -698,7 +692,7 @@ public class XParser: Parser {
                                     attributes.removeAll()
                                 }
                                 someElement = true
-                                ancestors.push(name ?? "")
+                                ancestors.append(name ?? "")
                                 elementLevel += 1
                                 name = nil
                                 state = .TEXT
@@ -775,8 +769,8 @@ public class XParser: Parser {
                         if name == nil {
                             try error("missing element name")
                         }
-                        if (name ?? "") != ancestors.peek() {
-                            try error("name end tag \"\(name ?? "")\" does not match name of open element \"\(ancestors.peek() ?? "")\"")
+                        if (name ?? "") != ancestors.last {
+                            try error("name end tag \"\(name ?? "")\" does not match name of open element \"\(ancestors.last ?? "")\"")
                         }
                         if !broadcast(
                             processEventHandler: { (eventHandler,textRange,dataRange) in
@@ -789,7 +783,7 @@ public class XParser: Parser {
                         ) {
                             return
                         }
-                        _ = ancestors.pop()
+                        _ = ancestors.removeLast()
                         elementLevel -= 1
                         name = nil
                         state = .TEXT
@@ -936,9 +930,9 @@ public class XParser: Parser {
                             if !texts.isEmpty {
                                 let text = texts.joined()
                                 if elementLevel > 0 {
-                                    if textAllowedInElementWithName?.contains(ancestors.peek()!) == false {
+                                    if textAllowedInElementWithName?.contains(ancestors.last!) == false {
                                         if !isWhitespace {
-                                            try error("non-whitespace #2 text in \(ancestors.elements.joined(separator: " / ")): \"\(formatNonWhitespace(text))\"")
+                                            try error("non-whitespace #2 text in \(ancestors.joined(separator: " / ")): \"\(formatNonWhitespace(text))\"")
                                         }
                                     }
                                     else {
@@ -2010,7 +2004,7 @@ public class XParser: Parser {
         column += 1
         
         if elementLevel > 0 {
-            try error("document is not finished: \(elementLevel > 1 ? "elements" : "element") \(ancestors.peekAll().reversed().map{ "\"\($0)\"" }.joined(separator: ", ")) \(elementLevel > 1 ? "are" : "is") not closed")
+            try error("document is not finished: \(elementLevel > 1 ? "elements" : "element") \(ancestors.reversed().map{ "\"\($0)\"" }.joined(separator: ", ")) \(elementLevel > 1 ? "are" : "is") not closed")
         }
         else if state != .TEXT {
             try error("junk at end of document")

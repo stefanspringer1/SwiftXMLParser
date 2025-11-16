@@ -9,6 +9,7 @@
 //===----------------------------------------------------------------------===//
 
 import Foundation
+import SwiftXMLParser
 import SwiftXMLInterfaces
 
 public class XTestPrinter: XTestWriter {
