@@ -8,7 +8,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
 
 let U_BOM_1: Data.Element = 0xEF
 let U_BOM_2: Data.Element = 0xBB

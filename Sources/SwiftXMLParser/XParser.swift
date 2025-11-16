@@ -8,7 +8,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+
 import SwiftXMLInterfaces
 
 // states for finding the type of declaration:
@@ -38,11 +43,11 @@ fileprivate struct tokenParseResult: itemParseResult {
 
 fileprivate extension String {
     func xmlEscpape() -> String {
-        self.replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "'", with: "&apos;")
+        self.replacing("&", with: "&amp;")
+            .replacing("<", with: "&lt;")
+            .replacing(">", with: "&gt;")
+            .replacing("\"", with: "&quot;")
+            .replacing("'", with: "&apos;")
     }
 }
 
@@ -149,7 +154,7 @@ public class XParser: Parser {
                 return "\"\(Character(UnicodeScalar(codePoint)!))\""
             }
             else {
-                return "character x\(String(format: "%X", codePoint))"
+                return "character x\(String(codePoint, radix: 16, uppercase: true))"
             }
         }
         
@@ -174,8 +179,8 @@ public class XParser: Parser {
         }
         
         func formatNonWhitespace(_ text: String) -> String {
-            return text.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
-                .trimmingCharacters(in: .whitespaces)
+            return text.replacing("\n", with: " ").replacing("\r", with: " ")
+                .replacing(/^s+/, with: "").replacing(/s+$/, with: "")
         }
         
         var binaryPosition = -1
@@ -355,7 +360,7 @@ public class XParser: Parser {
                         }
                     }
                     else {
-                        let text = texts.joined().replacingOccurrences(of: "\r\n", with: "\n")
+                        let text = texts.joined().replacing("\r\n", with: "\n")
                         if !broadcast(
                             startColumn: startColumn,
                             endLine: lastLine,
@@ -534,7 +539,7 @@ public class XParser: Parser {
                     }
                 }
                 else {
-                    try error("x\(String(format: "%X", codePoint)) is not a Unicode codepoint")
+                    try error("x\(String(codePoint, radix: 16, uppercase: true)) is not a Unicode codepoint")
                 }
                 
                 if ignoreNextLinebreak == 0 {
@@ -936,7 +941,7 @@ public class XParser: Parser {
                                         }
                                     }
                                     else {
-                                        let text = text.replacingOccurrences(of: "\r\n", with: "\n")
+                                        let text = text.replacing("\r\n", with: "\n")
                                         if !broadcast(
                                             endLine: beforeEntityLine,
                                             endColumn: beforeEntityColumn,

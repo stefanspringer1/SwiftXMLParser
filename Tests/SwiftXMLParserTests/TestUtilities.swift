@@ -8,7 +8,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+
 import SwiftXMLParser
 import SwiftXMLInterfaces
 
@@ -92,7 +97,7 @@ public class XSimpleInternalEntityResolver: InternalEntityResolver {
 
 func linesFromData(data: Data) -> [String] {
     let text = String(data: data, encoding: String.Encoding.utf8)!
-    return text.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false).map{ String($0) }
+    return text.replacing("\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false).map{ String($0) }
 }
 
 public class XTestParsePrinter: XEventHandler {
@@ -366,10 +371,10 @@ extension String {
     
     func cited() -> String {
         return self
-            .replacingOccurrences(of: "\r\n", with: "\\n")
-            .replacingOccurrences(of: "\r", with: "\\n")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacing("\r\n", with: "\\n")
+            .replacing("\r", with: "\\n")
+            .replacing("\n", with: "\\n")
+            .replacing("\"", with: "\\\"")
         //        return self.debugDescription
     }
     
