@@ -5,13 +5,19 @@ import PackageDescription
 
 let package = Package(
     name: "SwiftXMLParser",
+    platforms: [
+        .iOS(.v16),
+        .macOS(.v13),
+        .tvOS(.v16),
+        .watchOS(.v9),
+    ],
     products: [
         .library(
             name: "SwiftXMLParser",
             targets: ["SwiftXMLParser"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/stefanspringer1/SwiftXMLInterfaces", from: "8.0.1"),
+        .package(url: "https://github.com/stefanspringer1/SwiftXMLInterfaces", from: "8.0.2"),
     ],
     targets: [
         .target(
