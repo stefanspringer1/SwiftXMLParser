@@ -6,10 +6,10 @@ import PackageDescription
 let package = Package(
     name: "SwiftXMLParser",
     platforms: [
-        .iOS(.v16),
-        .macOS(.v13),
-        .tvOS(.v16),
-        .watchOS(.v9),
+        .macOS(.v15),
+        .iOS(.v17),
+        .tvOS(.v17),
+        .watchOS(.v10),
     ],
     products: [
         .library(
