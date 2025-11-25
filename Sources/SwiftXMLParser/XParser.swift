@@ -123,7 +123,7 @@ public class XParser: Parser {
         self.debugWriter = debugWriter
     }
     
-    @available(*, deprecated, message: "this package is deprecated, use the repository https://github.com/swiftxml/SwiftXMLParser instead")
+    @available(*, deprecated, message: "this package is deprecated, use the repository https://github.com/swiftxml/SwiftXMLParser instead and note the version number being reset to 1.0.0")
     public func parse(
         fromData _data: Data,
         sourceInfo: String? = nil,
