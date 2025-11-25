@@ -1,5 +1,15 @@
 # SwiftXMLParser
 
+---
+
+⚠️ **NOTE:**
+
+This package is _deprecated;_ use the following, currently maintained package instead:
+
+https://github.com/swiftxml/SwiftXMLParser
+
+---
+
 ## About This Library
 
 This is a non-validating parser for XML files encoded in UTF-8.
